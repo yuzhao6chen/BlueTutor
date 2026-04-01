@@ -1,0 +1,52 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===== Node / Frontend =====
+node_modules/
+dist/
+build/
+
+# ===== IDE / Editor =====
+.vscode/
+.idea/
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# ===== Logs =====
+*.log
+
+# ===== Environment variables / secrets =====
+.env
+.env.*
+*.env
+
+# ===== Local database / temp files =====
+*.sqlite3
+*.db
+tmp/
+temp/
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
