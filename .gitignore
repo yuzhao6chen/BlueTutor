@@ -1,52 +1,37 @@
-# ===== Python =====
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-
-# Virtual environments
+```
+# Dependencies
 .venv/
 venv/
-env/
-ENV/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Packaging
-build/
-dist/
-*.egg-info/
+# Environment variables
+.env
+.env.local
+*.env.*
 
-# Test / coverage
-.pytest_cache/
+# Logs
+*.log
+
+# Coverage reports
 .coverage
+coverage/
 htmlcov/
 
-# ===== Node / Frontend =====
-node_modules/
-dist/
-build/
-
-# ===== IDE / Editor =====
+# IDE specific
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# ===== OS files =====
+# OS generated files
 .DS_Store
 Thumbs.db
 
-# ===== Logs =====
-*.log
-
-# ===== Environment variables / secrets =====
-.env
-.env.*
-*.env
-
-# ===== Local database / temp files =====
-*.sqlite3
-*.db
-tmp/
-temp/
-
-# ===== Jupyter =====
-.ipynb_checkpoints/
+# Build artifacts
+dist/
+build/
+*.egg-info/
+```
