@@ -14,12 +14,12 @@ class NodeStatus(str, Enum):
 @dataclass
 class ThinkingNode:
     """思维树的单个节点"""
-    node_id: str  # 节点唯一标识，如 "approach_1_step_2"
-    content: str  # 节点描述，如 "假设全是鸡，共60只脚"
-    status: NodeStatus  # 节点状态
-    parent_id: Optional[str] = None  # 父节点ID，根节点为None
-    error_type: Optional[str] = None  # 仅在status为INCORRECT或STUCK时有值
-    children: list[str] = field(default_factory=list)  # 子节点ID列表
+    node_id: str                              # 节点唯一标识
+    content: str                              # 节点描述
+    status: NodeStatus                        # 节点当前状态
+    parent_id: Optional[str] = None          # 父节点ID，根节点为None
+    error_history: list[str] = field(default_factory=list)  # 错误历史列表，按时间顺序追加
+    children: list[str] = field(default_factory=list)       # 子节点ID列表
 
 
 @dataclass
@@ -40,6 +40,9 @@ class SessionState:
     # 当前卡点被引导的次数
     stuck_count: int = 0
 
+    # 记录最新被操作的节点ID
+    last_updated_node_id: Optional[str] = None
+
     # TODO: 预留扩展接口 - 后续可从用户画像模块注入学生历史错误画像
     # student_profile: Optional[dict] = None
 
@@ -49,9 +52,12 @@ class SessionState:
         if node.parent_id and node.parent_id in self.thinking_tree:
             self.thinking_tree[node.parent_id].children.append(node.node_id)
 
-    def update_node(self, node_id: str, status: NodeStatus,
-                    error_type: Optional[str] = None) -> None:
+    def update_node_status(self, node_id: str, status: NodeStatus) -> None:
         """更新已有节点的状态"""
         if node_id in self.thinking_tree:
             self.thinking_tree[node_id].status = status
-            self.thinking_tree[node_id].error_type = error_type
+
+    def append_error(self, node_id: str, error_type: str) -> None:
+        """向节点的错误历史中追加一条错误记录"""
+        if node_id in self.thinking_tree:
+            self.thinking_tree[node_id].error_history.append(error_type)

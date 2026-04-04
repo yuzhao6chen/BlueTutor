@@ -1,11 +1,12 @@
-import os
 import json
+import os
+
 from dotenv import load_dotenv
 from langchain_community.chat_models import ChatTongyi
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
-from phase2_dialogue.session_state import SessionState
+from phase2_dialogue.dialogue_graph_state import DialogueGraphState
 
 load_dotenv()
 
@@ -45,26 +46,26 @@ QUESTION_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
 
 【当前卡点被引导次数】
 {stuck_count}
+
+【本轮最新操作的节点】
+{last_updated_node_id}
 """)
+
 ])
 
 
-def run_question_generator(state: SessionState) -> str:
+def run_question_generator(graph_state: "DialogueGraphState") -> "DialogueGraphState":
     """
-    运行提问生成Agent，生成苏格拉底式引导问题。
-
-    Args:
-        state: 当前会话状态
-
-    Returns:
-        生成的引导问题字符串
+    提问生成Agent节点函数。
+    根据当前状态生成苏格拉底式引导问题，返回新的图状态。
     """
     from phase2_dialogue.state_tracker import _serialize_tree, _serialize_dialogue
 
+    state = graph_state["session_state"]
+
     llm = ChatTongyi(
         api_key=os.environ["DASHSCOPE_API_KEY"],
-        model="qwen-plus",
-        temperature=0.7
+        model="qwen-plus"
     )
 
     chain = QUESTION_GENERATOR_PROMPT | llm | StrOutputParser()
@@ -73,7 +74,57 @@ def run_question_generator(state: SessionState) -> str:
         "parsed_problem": json.dumps(state.parsed_problem, ensure_ascii=False),
         "thinking_tree": _serialize_tree(state.thinking_tree),
         "dialogue_history": _serialize_dialogue(state.dialogue_history),
-        "stuck_count": state.stuck_count
+        "stuck_count": state.stuck_count,
+        "last_updated_node_id": state.last_updated_node_id if state.last_updated_node_id else "无"
     })
 
-    return result.strip()
+    return {
+        "session_state": state,
+        "student_input": graph_state["student_input"],  # 保持不变
+        "generated_question": result.strip(),
+        "rejection_reason": None,  # 每次重新生成时清空上一轮的打回原因
+        "retry_count": graph_state["retry_count"]  # 保持不变
+    }
+
+
+
+if __name__ == '__main__':
+    from phase2_dialogue.session_state import SessionState, ThinkingNode, NodeStatus
+
+    # 重构后的测试用例，使用state_tracker测试结果的状态
+    test_session_state = SessionState(
+        parsed_problem={
+            'known_conditions': ['鸡和兔共有30个头', '鸡和兔共有80只脚', '鸡有2只脚', '兔有4只脚'],
+            'goal': '求鸡的只数和兔的只数',
+            'answer': '鸡20只，兔10只'
+        },
+        thinking_tree={
+            "a1": ThinkingNode(
+                node_id="a1",
+                content="假设法：假设全部是鸡，共60只脚",
+                status=NodeStatus.STUCK,
+                parent_id=None,
+                error_history=["学生表示不知从何入手，尚未形成具体步骤，但假设法是本题典型切入点"]
+            )
+        },
+        dialogue_history=[{"role": "学生", "content": "我不知道这道题从何入手。"}],
+        current_stuck_node_id="a1",
+        stuck_count=1,
+        last_updated_node_id="a1"
+    )
+
+    # 创建测试用的DialogueGraphState
+    test_graph_state: DialogueGraphState = {
+        "session_state": test_session_state,
+        "student_input": "",  # 初始化为空，因为问题生成不依赖最新输入
+        "generated_question": "",  # 初始化为空
+        "rejection_reason": None,  # 初始化为None
+        "retry_count": 0  # 初始化为0
+    }
+
+    # 调用问题生成器
+    updated_graph_state = run_question_generator(test_graph_state)
+
+    # 打印生成的提问
+    print("Generated Question:")
+    print(updated_graph_state["generated_question"])
