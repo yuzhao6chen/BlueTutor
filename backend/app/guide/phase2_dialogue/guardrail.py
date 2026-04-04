@@ -26,27 +26,35 @@ GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
 - 直接给出了最终答案或中间步骤的具体数值
 - 问题本身已经暗示了正确的解题方向，学生只需照做即可
 - 问题包含了不必要的计算提示，使学生无需独立思考
+- 注意：仅仅肯定学生的正确回答，并在此基础上引导下一步思考，不属于泄题
+
 
 以下情况判定为"合格"：
 - 问题只是引导学生思考，没有透露任何答案信息
 - 问题给出了具体提示（当stuck_count>=3时允许），但未给出最终答案
+- 问题中复述或确认的内容，与学生上一轮回答中已经说出的内容一致，属于承接而非泄题
+
 
 请严格按照以下 JSON 格式输出，不要输出任何其他内容：
 
-合格：
+通过审核时：
 {{
   "passed": true,
   "reason": null
 }}
 
-不合格：
+未通过审核时：
 {{
   "passed": false,
   "reason": "具体说明哪里泄题了，以便提问生成Agent修正"
 }}
+
 """),
     ("human", """【标准答案】
 {answer}
+
+【学生的上一轮回答】
+{last_student_input}
 
 【待审核的引导问题】
 {question}
@@ -78,7 +86,10 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
     result = chain.invoke({
         "answer": state.parsed_problem["answer"],
         "question": question,
-        "previous_rejection": graph_state["rejection_reason"] if graph_state["rejection_reason"] else "无"
+        "previous_rejection": graph_state["rejection_reason"]
+        if graph_state["rejection_reason"] else "无",
+        "last_student_input": graph_state["session_state"].dialogue_history[-1]["content"]
+        if graph_state["session_state"].dialogue_history else "无"
     })
 
     if result["passed"]:
@@ -113,7 +124,6 @@ def should_retry(graph_state: "DialogueGraphState") -> str:
     if graph_state["rejection_reason"] is None:
         return "end"
     return "question_generator"
-
 
 
 if __name__ == '__main__':
