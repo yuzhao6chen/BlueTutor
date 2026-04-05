@@ -98,6 +98,7 @@ STATE_TRACKER_PROMPT = ChatPromptTemplate.from_messages([
     1. 在新增节点前，必须先检查思维树中是否已存在语义相近的思路分支。若存在，优先在已有分支下新增步骤节点，而非创建新的思路分支。
     2. mark_stuck 只用于学生在已有节点上再次卡住的情况，不用于新节点。
     3. mark_abandoned 只作用于思路分支节点，不作用于步骤节点。
+    4. 节点 content 的内容必须来源于学生的实际表述。若学生表示完全没有思路，允许根据题目特征推断一个合理的起点思路新建节点，但必须在 content 开头加上"【引导方向】"前缀，例如："【引导方向】假设法：假设全部是鸡，共60只脚"，以区别于学生主动表述的步骤。
     """),
     ("human", """【题目信息】
 {parsed_problem}
@@ -256,7 +257,8 @@ def run_state_tracker(graph_state: "DialogueGraphState") -> "DialogueGraphState"
         "student_input": graph_state["student_input"],  # 保持不变
         "generated_question": graph_state["generated_question"],  # 保持不变
         "rejection_reason": graph_state["rejection_reason"],  # 保持不变
-        "retry_count": graph_state["retry_count"]  # 保持不变
+        "retry_count": graph_state["retry_count"],  # 保持不变
+        "teaching_guidance": graph_state["teaching_guidance"] # 保持不变
     }
 
 
@@ -281,7 +283,7 @@ if __name__ == '__main__':
         "session_state": test_session_state,
         "student_input": "我不知道这道题从何入手。",
         "generated_question": "",  # 初始化为空
-        "rejection_reason": None,  # 初始化为None
+        "rejection_reason": [],  # 初始化为[]
         "retry_count": 0  # 初始化为0
     }
 

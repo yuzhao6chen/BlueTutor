@@ -6,34 +6,34 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from phase2_dialogue.dialogue_graph_state import DialogueGraphState
-from phase2_dialogue.question_generator import run_question_generator
 
 load_dotenv()
 
-MAX_RETRY = 3  # 守门Agent最大重试次数
+MAX_RETRY = 3  # 守门Agent最大打回次数
 FALLBACK_QUESTION = "你觉得下一步应该怎么做呢？"  # 超过重试次数后的兜底问题
 
 GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """你是一位严格的教学质量审核员，负责检查教师提出的引导问题是否符合苏格拉底式教学原则。
+    ("system", """你是一位严格但有经验的教学质量审核员，负责检查教师提出的引导回复是否符合苏格拉底式教学原则。
 
 你会收到以下信息：
 1. 题目的标准答案
-2. 待审核的引导问题
-3. 如果是重写请求，还会收到上一次被打回的原因
+2. 学生的上一轮回答
+3. 待审核的教师回复
+4. 如果是重写请求，还会收到上次被打回的原因
+5. 情境分析与教学建议（说明当前学生状态及允许的引导力度）
 
 【审核标准】
 以下任意一条成立，则判定为"不合格"：
-- 直接给出了最终答案或中间步骤的具体数值
-- 问题本身已经暗示了正确的解题方向，学生只需照做即可
-- 问题包含了不必要的计算提示，使学生无需独立思考
-- 注意：仅仅肯定学生的正确回答，并在此基础上引导下一步思考，不属于泄题
-
+- 直接给出了最终答案
+- 给出了题目中未出现的、学生尚未推导出的中间计算结果（如直接说出"多出20只脚"）
+- 直接给出了完整的解题步骤或方程，使学生无需思考即可照做
+- 情境分析建议中未明确允许具体提示时，暗示了特定的代数设定（如"设鸡为x只"）
 
 以下情况判定为"合格"：
-- 问题只是引导学生思考，没有透露任何答案信息
-- 问题给出了具体提示（当stuck_count>=3时允许），但未给出最终答案
-- 问题中复述或确认的内容，与学生上一轮回答中已经说出的内容一致，属于承接而非泄题
-
+- 引用了题目原文中已有的已知条件（如速度比5:4、共30个头），不属于泄题
+- 复述或确认了学生上一轮回答中已经说出的内容，属于承接而非泄题
+- 对学生的正确回答给予肯定，并在此基础上引导下一步思考，不属于泄题
+- 情境分析建议中明确允许给出具体提示时，给出了方向性提示但未给出最终答案
 
 请严格按照以下 JSON 格式输出，不要输出任何其他内容：
 
@@ -43,12 +43,11 @@ GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
   "reason": null
 }}
 
-未通过审核时：
+    未通过审核时：
 {{
   "passed": false,
   "reason": "具体说明哪里泄题了，以便提问生成Agent修正"
 }}
-
 """),
     ("human", """【标准答案】
 {answer}
@@ -56,11 +55,14 @@ GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
 【学生的上一轮回答】
 {last_student_input}
 
-【待审核的引导问题】
+【待审核的教师回复】
 {question}
 
 【上次被打回的原因（如有）】
 {previous_rejection}
+
+【情境分析与教学建议】
+{teaching_guidance}
 """)
 ])
 
@@ -86,11 +88,18 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
     result = chain.invoke({
         "answer": state.parsed_problem["answer"],
         "question": question,
-        "previous_rejection": graph_state["rejection_reason"]
-        if graph_state["rejection_reason"] else "无",
+        "previous_rejection": "\n".join(
+            f"{i + 1}. {reason}"
+            for i, reason in enumerate(graph_state["rejection_reason"])
+        ) if graph_state["rejection_reason"] else "无",
         "last_student_input": graph_state["session_state"].dialogue_history[-1]["content"]
-        if graph_state["session_state"].dialogue_history else "无"
+        if graph_state["session_state"].dialogue_history else "无",
+        "teaching_guidance": graph_state["teaching_guidance"] if graph_state["teaching_guidance"] else "无"
     })
+
+    # 测试
+    # print(result)
+
 
     if result["passed"]:
         # 通过审核，清空打回原因和重试计数
@@ -98,20 +107,28 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
             "session_state": state,
             "student_input": graph_state["student_input"],
             "generated_question": question,
-            "rejection_reason": None,
-            "retry_count": 0
+            "rejection_reason": [],
+            "retry_count": 0,
+            "teaching_guidance": graph_state["teaching_guidance"]
         }
     else:
         # 未通过审核，记录打回原因，递增重试计数
         new_retry_count = retry_count + 1
         # 超过最大重试次数，使用兜底问题
-        final_question = FALLBACK_QUESTION if new_retry_count >= MAX_RETRY else question
+        final_question = FALLBACK_QUESTION if new_retry_count > MAX_RETRY else question
+
+        # 测试
+        # print(graph_state["rejection_reason"] + [
+        #     result["reason"]] if new_retry_count < MAX_RETRY else [])
+
         return {
             "session_state": state,
             "student_input": graph_state["student_input"],
             "generated_question": final_question,
-            "rejection_reason": result["reason"] if new_retry_count < MAX_RETRY else None,
-            "retry_count": new_retry_count
+            "rejection_reason": graph_state["rejection_reason"] + [
+                result["reason"]] if new_retry_count <= MAX_RETRY else [],
+            "retry_count": new_retry_count,
+            "teaching_guidance": graph_state["teaching_guidance"]
         }
 
 
@@ -121,57 +138,55 @@ def should_retry(graph_state: "DialogueGraphState") -> str:
     根据守门Agent的判断结果决定下一个节点。
     """
     # 没有打回原因，说明通过了审核或已使用兜底问题
-    if graph_state["rejection_reason"] is None:
+    if not graph_state["rejection_reason"]:
         return "end"
     return "question_generator"
 
 
 if __name__ == '__main__':
-    # 测试用例
-    from phase2_dialogue.session_state import SessionState, ThinkingNode, NodeStatus
+    from phase2_dialogue.session_state import SessionState
+    from phase2_dialogue.state_tracker import run_state_tracker
+    from phase2_dialogue.situation_analyzer import run_situation_analyzer
+    from phase2_dialogue.question_generator import run_question_generator
 
-    # 创建测试用的SessionState，使用question_generator测试的状态
+    # 创建初始 SessionState（思维树为空，模拟学生刚开始作答）
     test_session_state = SessionState(
         parsed_problem={
             'known_conditions': ['鸡和兔共有30个头', '鸡和兔共有80只脚', '鸡有2只脚', '兔有4只脚'],
             'goal': '求鸡的只数和兔的只数',
             'answer': '鸡20只，兔10只'
         },
-        thinking_tree={
-            "a1": ThinkingNode(
-                node_id="a1",
-                content="假设法：假设全部是鸡，共60只脚",
-                status=NodeStatus.STUCK,
-                parent_id=None,
-                error_history=["学生表示不知从何入手，尚未形成具体步骤，但假设法是本题典型切入点"]
-            )
-        },
-        dialogue_history=[{"role": "学生", "content": "我不知道这道题从何入手。"}],
-        current_stuck_node_id="a1",
-        stuck_count=1,
-        last_updated_node_id="a1"
+        thinking_tree={},
+        dialogue_history=[],
     )
 
-    # 创建初始的DialogueGraphState（无问题）
+    # 初始化图状态
     initial_graph_state: DialogueGraphState = {
         "session_state": test_session_state,
-        "student_input": "",  # 初始化为空
-        "generated_question": "",  # 初始化为空
-        "rejection_reason": None,  # 初始化为None
-        "retry_count": 0  # 初始化为0
+        "student_input": "我不知道这道题从何入手。",
+        "generated_question": "",
+        "rejection_reason": [],
+        "retry_count": 0,
+        "teaching_guidance": ""
     }
 
-    # 先调用问题生成器生成问题
-    graph_state_with_question = run_question_generator(initial_graph_state)
-    print("Question Generator Output:")
-    print(f"Generated Question: {graph_state_with_question['generated_question']}")
-    print(f"Rejection Reason: {graph_state_with_question['rejection_reason']}")
-    print(f"Retry Count: {graph_state_with_question['retry_count']}\n")
+    # 链式调用：state_tracker → situation_analyzer → question_generator → guardrail
+    print("=== State Tracker ===")
+    state1 = run_state_tracker(initial_graph_state)
+    print(f"Thinking Tree: {state1['session_state'].thinking_tree}")
+    print(f"Stuck Count: {state1['session_state'].stuck_count}\n")
 
-    # 然后调用守门Agent审核问题
-    final_graph_state = run_guardrail(graph_state_with_question)
-    print("Guardrail Final Output:")
-    print(f"Generated Question: {final_graph_state['generated_question']}")
-    print(f"Rejection Reason: {final_graph_state['rejection_reason']}")
-    print(f"Retry Count: {final_graph_state['retry_count']}")
-    print(f"Should Retry: {should_retry(final_graph_state)}")
+    print("=== Situation Analyzer ===")
+    state2 = run_situation_analyzer(state1)
+    print(f"Teaching Guidance: {state2['teaching_guidance']}\n")
+
+    print("=== Question Generator ===")
+    state3 = run_question_generator(state2)
+    print(f"Generated Question:\n{state3['generated_question']}\n")
+
+    print("=== Guardrail ===")
+    state4 = run_guardrail(state3)
+    print(f"Generated Question: {state4['generated_question']}")
+    print(f"Rejection Reason: {state4['rejection_reason']}")
+    print(f"Retry Count: {state4['retry_count']}")
+    print(f"Should Retry: {should_retry(state4)}")

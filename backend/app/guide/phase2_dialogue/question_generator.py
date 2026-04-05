@@ -11,29 +11,39 @@ from phase2_dialogue.dialogue_graph_state import DialogueGraphState
 load_dotenv()
 
 QUESTION_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """你是一位经验丰富的苏格拉底式数学教师，擅长通过提问引导学生自主思考。
+    ("system", """你是一位经验丰富、富有同理心的苏格拉底式数学教师，擅长通过提问引导小学生自主思考。
 
 你会收到以下信息：
 1. 题目信息（已知条件、求解目标、标准答案）
 2. 当前思维树（学生的解题思路和当前卡点）
 3. 完整对话历史
 4. 当前卡点被引导的次数（stuck_count）
+5. 情境分析与教学建议（对学生当前状态的判断，以及对你本次回复的具体指导）
 
-你的任务是生成一个引导性问题，帮助学生突破当前卡点。
+你的任务是根据以上信息，生成一段回复，发送给学生。
 
-【提问原则】
-1. 只针对当前卡点，不跳步，不超前
-2. 绝对不能直接给出答案，也不能暗示答案
-3. 问题要简洁，一次只问一件事
-4. 语气亲切自然，符合与小学生对话的风格
-5. 问题要与上文对话自然衔接，不能显得突兀
+【关于思维树的重要说明】
+思维树中 content 以"【引导方向】"开头的节点，是系统为引导学生而预设的方向，并非学生已经说出的内容。
+在分析学生状态和生成教学建议时，必须严格遵守以下两点：
+1. 不可将此类节点视为学生的进展或成果，不可在建议中出现"学生想到了……"、"从……入手很对"等归因于学生的表述。
+2. 此类节点只能作为"下一步引导的方向"来使用，建议的措辞应为"可以引导学生尝试……"而非"肯定学生已经……"。
+
+
+【回复原则】
+1. 严格遵照【情境分析与教学建议】中的指导，调整语气、引导力度和是否给予情感支持
+2. 如果建议中提到学生答对了某步骤，必须先给予明确、真诚的肯定，再引导下一步
+3. 如果建议中提到学生情绪低落或沮丧，必须先给予温暖的鼓励，再提出问题
+4. 引导问题只针对当前卡点，不跳步，不超前
+5. 绝对不能直接给出答案，也不能暗示答案（除非情境分析明确允许给出具体提示）
+6. 一次只问一件事，问题简洁明了
+7. 语气亲切自然，符合与小学生对话的风格，可以使用"我们"、"你试试看"等拉近距离的表达
 
 【根据stuck_count调整引导力度】
 - stuck_count 为 1-2 次：提出抽象的启发性问题，如"你觉得下一步应该做什么？"
-- stuck_count 为 3 次及以上：可以给出该步骤的具体提示，但仍不能给出最终答案，如"你试试看，如果假设全都是鸡，一共应该有几只脚？"
+- stuck_count 为 3 次及以上：可以给出该步骤的具体提示，但仍不能给出最终答案
 
-【只输出问题本身】
-不要输出任何解释、分析或前缀，直接输出问题。
+【输出格式】
+直接输出发送给学生的完整回复，可以包含肯定、鼓励和引导问题，不要输出任何分析、标注或前缀。
 """),
     ("human", """【题目信息】
 {parsed_problem}
@@ -49,6 +59,12 @@ QUESTION_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
 
 【本轮最新操作的节点】
 {last_updated_node_id}
+
+【上次被打回的原因（如有）】
+{rejection_reason}
+
+【情境分析与教学建议】
+{teaching_guidance}
 """)
 
 ])
@@ -75,56 +91,62 @@ def run_question_generator(graph_state: "DialogueGraphState") -> "DialogueGraphS
         "thinking_tree": _serialize_tree(state.thinking_tree),
         "dialogue_history": _serialize_dialogue(state.dialogue_history),
         "stuck_count": state.stuck_count,
-        "last_updated_node_id": state.last_updated_node_id if state.last_updated_node_id else "无"
+        "last_updated_node_id": state.last_updated_node_id if state.last_updated_node_id else "无",
+        "rejection_reason": "\n".join(
+            f"{i + 1}. {reason}"
+            for i, reason in enumerate(graph_state["rejection_reason"])
+        ) if graph_state["rejection_reason"] else "无",
+        "teaching_guidance": graph_state["teaching_guidance"] if graph_state["teaching_guidance"] else "无"
     })
 
     return {
         "session_state": state,
         "student_input": graph_state["student_input"],  # 保持不变
         "generated_question": result.strip(),
-        "rejection_reason": None,  # 每次重新生成时清空上一轮的打回原因
-        "retry_count": graph_state["retry_count"]  # 保持不变
+        "rejection_reason": graph_state["rejection_reason"],  # 保持不变
+        "retry_count": graph_state["retry_count"],  # 保持不变
+        "teaching_guidance": graph_state["teaching_guidance"] # 保持不变
     }
 
 
-
 if __name__ == '__main__':
-    from phase2_dialogue.session_state import SessionState, ThinkingNode, NodeStatus
+    from phase2_dialogue.session_state import SessionState
+    from phase2_dialogue.state_tracker import run_state_tracker
+    from phase2_dialogue.situation_analyzer import run_situation_analyzer
 
-    # 重构后的测试用例，使用state_tracker测试结果的状态
+    # 创建初始 SessionState（思维树为空，模拟学生刚开始作答）
     test_session_state = SessionState(
         parsed_problem={
             'known_conditions': ['鸡和兔共有30个头', '鸡和兔共有80只脚', '鸡有2只脚', '兔有4只脚'],
             'goal': '求鸡的只数和兔的只数',
             'answer': '鸡20只，兔10只'
         },
-        thinking_tree={
-            "a1": ThinkingNode(
-                node_id="a1",
-                content="假设法：假设全部是鸡，共60只脚",
-                status=NodeStatus.STUCK,
-                parent_id=None,
-                error_history=["学生表示不知从何入手，尚未形成具体步骤，但假设法是本题典型切入点"]
-            )
-        },
-        dialogue_history=[{"role": "学生", "content": "我不知道这道题从何入手。"}],
-        current_stuck_node_id="a1",
-        stuck_count=1,
-        last_updated_node_id="a1"
+        thinking_tree={},
+        dialogue_history=[],
     )
 
-    # 创建测试用的DialogueGraphState
+    # 初始化图状态
     test_graph_state: DialogueGraphState = {
         "session_state": test_session_state,
-        "student_input": "",  # 初始化为空，因为问题生成不依赖最新输入
-        "generated_question": "",  # 初始化为空
-        "rejection_reason": None,  # 初始化为None
-        "retry_count": 0  # 初始化为0
+        "student_input": "我不知道这道题从何入手。",
+        "generated_question": "",
+        "rejection_reason": [],
+        "retry_count": 0,
+        "teaching_guidance": ""
     }
 
-    # 调用问题生成器
-    updated_graph_state = run_question_generator(test_graph_state)
+    # 第一步：调用 state_tracker
+    state_after_tracker = run_state_tracker(test_graph_state)
+    print("=== State Tracker Output ===")
+    print(f"Thinking Tree: {state_after_tracker['session_state'].thinking_tree}")
+    print(f"Stuck Count: {state_after_tracker['session_state'].stuck_count}\n")
 
-    # 打印生成的提问
-    print("Generated Question:")
-    print(updated_graph_state["generated_question"])
+    # 第二步：调用 situation_analyzer
+    state_after_analyzer = run_situation_analyzer(state_after_tracker)
+    print("=== Situation Analyzer Output ===")
+    print(f"Teaching Guidance: {state_after_analyzer['teaching_guidance']}\n")
+
+    # 第三步：调用 question_generator
+    final_state = run_question_generator(state_after_analyzer)
+    print("=== Question Generator Output ===")
+    print(f"Generated Question:\n{final_state['generated_question']}")
