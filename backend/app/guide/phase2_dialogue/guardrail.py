@@ -6,10 +6,11 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from phase2_dialogue.dialogue_graph_state import DialogueGraphState
+from phase2_dialogue.state_tracker import _serialize_dialogue
 
 load_dotenv()
 
-MAX_RETRY = 3  # 守门Agent最大打回次数
+MAX_RETRY = 4  # 守门Agent最大打回次数
 FALLBACK_QUESTION = "你觉得下一步应该怎么做呢？"  # 超过重试次数后的兜底问题
 
 GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
@@ -17,7 +18,7 @@ GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
 
 你会收到以下信息：
 1. 题目的标准答案
-2. 学生的上一轮回答
+2. 完整对话历史（包含所有轮次的学生回答和教师回复）
 3. 待审核的教师回复
 4. 如果是重写请求，还会收到上次被打回的原因
 5. 情境分析与教学建议（说明当前学生状态及允许的引导力度）
@@ -31,7 +32,7 @@ GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
 
 以下情况判定为"合格"：
 - 引用了题目原文中已有的已知条件（如速度比5:4、共30个头），不属于泄题
-- 复述或确认了学生上一轮回答中已经说出的内容，属于承接而非泄题
+- 复述或确认了学生在对话历史中任意一轮已经说出或推导出的内容，属于承接而非泄题
 - 对学生的正确回答给予肯定，并在此基础上引导下一步思考，不属于泄题
 - 情境分析建议中明确允许给出具体提示时，给出了方向性提示但未给出最终答案
 
@@ -52,8 +53,8 @@ GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
     ("human", """【标准答案】
 {answer}
 
-【学生的上一轮回答】
-{last_student_input}
+【完整对话历史】
+{dialogue_history}
 
 【待审核的教师回复】
 {question}
@@ -92,8 +93,7 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
             f"{i + 1}. {reason}"
             for i, reason in enumerate(graph_state["rejection_reason"])
         ) if graph_state["rejection_reason"] else "无",
-        "last_student_input": graph_state["session_state"].dialogue_history[-1]["content"]
-        if graph_state["session_state"].dialogue_history else "无",
+        "dialogue_history": _serialize_dialogue(state.dialogue_history),
         "teaching_guidance": graph_state["teaching_guidance"] if graph_state["teaching_guidance"] else "无"
     })
 
