@@ -85,7 +85,7 @@ def run_one_turn(graph, state: SessionState, student_input: str) -> tuple[Sessio
     # 将老师的问题记录到对话历史
     final_question = result["generated_question"]
     result["session_state"].dialogue_history.append(
-        {"role": "老师", "content": final_question}
+        {"role": "tutor", "content": final_question}
     )
 
     return result["session_state"], final_question
@@ -168,7 +168,7 @@ if __name__ == "__main__":
         # 将老师的问题记录到对话历史
         final_question = graph_state["generated_question"]
         graph_state["session_state"].dialogue_history.append(
-            {"role": "老师", "content": final_question}
+            {"role": "tutor", "content": final_question}
         )
         state = graph_state["session_state"]
 

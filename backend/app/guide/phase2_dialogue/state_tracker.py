@@ -229,7 +229,7 @@ def run_state_tracker(graph_state: "DialogueGraphState") -> "DialogueGraphState"
 
     # result 是一个操作指令列表（可能为空列表或 None）
     if not result:
-        state.dialogue_history.append({"role": "学生", "content": student_input})
+        state.dialogue_history.append({"role": "student", "content": student_input})
         return {
             "session_state": state,
             "student_input": graph_state["student_input"],
@@ -301,7 +301,7 @@ def run_state_tracker(graph_state: "DialogueGraphState") -> "DialogueGraphState"
             state.last_updated_node_id = node_id
 
     # 将学生输入记录到对话历史
-    state.dialogue_history.append({"role": "学生", "content": student_input})
+    state.dialogue_history.append({"role": "student", "content": student_input})
 
     return {
         "session_state": state,
