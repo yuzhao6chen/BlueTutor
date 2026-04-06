@@ -46,11 +46,41 @@ class SessionState:
     # TODO: 预留扩展接口 - 后续可从用户画像模块注入学生历史错误画像
     # student_profile: Optional[dict] = None
 
+    def __post_init__(self):
+        """初始化时自动创建总根节点 n0"""
+        if not self.thinking_tree:
+            root = ThinkingNode(
+                node_id="n0",
+                content="解题起点",
+                status=NodeStatus.STUCK,
+                parent_id=None
+            )
+            self.thinking_tree["n0"] = root
+            self.current_stuck_node_id = "n0"
+            self.stuck_count = 0
+
+    def next_node_id(self) -> str:
+        """生成下一个可用的全局自增节点 ID，格式为 n1、n2、n3……"""
+        nums = [
+            int(node_id[1:]) for node_id in self.thinking_tree
+            if node_id.startswith("n") and node_id[1:].isdigit()
+        ]
+        return f"n{max(nums) + 1}" if nums else "n1"
+
     def add_node(self, node: ThinkingNode) -> None:
-        """将新节点加入思维树，并更新父节点的children列表"""
+        """将新节点加入思维树，并更新父节点的 children 列表。
+        若父节点处于 stuck 状态，自动将其标记为 correct（卡点已被突破）。
+        """
         self.thinking_tree[node.node_id] = node
         if node.parent_id and node.parent_id in self.thinking_tree:
-            self.thinking_tree[node.parent_id].children.append(node.node_id)
+            parent = self.thinking_tree[node.parent_id]
+            parent.children.append(node.node_id)
+            # 若父节点是卡点，说明学生已推进，自动解除 stuck
+            if parent.status == NodeStatus.STUCK:
+                parent.status = NodeStatus.CORRECT
+                if self.current_stuck_node_id == node.parent_id:
+                    self.current_stuck_node_id = None
+                    self.stuck_count = 0
 
     def update_node_status(self, node_id: str, status: NodeStatus) -> None:
         """更新已有节点的状态"""

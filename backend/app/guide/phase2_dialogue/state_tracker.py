@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from typing import Optional
 
 from phase2_dialogue.dialogue_graph_state import DialogueGraphState
 from phase2_dialogue.session_state import SessionState, ThinkingNode, NodeStatus
@@ -16,55 +17,62 @@ STATE_TRACKER_PROMPT = ChatPromptTemplate.from_messages([
 
     你会收到以下信息：
     1. 题目信息（已知条件、求解目标、标准答案）
-    2. 当前思维树（包含两部分：可读结构大纲用于理解层级关系，JSON结构用于操作node_id）
+    2. 当前思维树（包含两部分：可读结构大纲用于理解层级关系，JSON结构用于引用 node_id）
     3. 完整对话历史
     4. 学生的最新输入
 
-    你的任务是分析学生的最新输入，输出一条操作指令来更新思维树。
+    你的任务是分析学生的最新输入，输出一个操作指令列表来更新思维树。
+
+    ---
+
+    【思维树结构说明】
+
+    思维树是一棵 n 叉树，每个节点代表学生解题过程中的一个认知步骤。
+    任何节点都可以有任意数量的子节点（分叉），分叉表示学生从同一步骤出发尝试了不同的后续方向。
+    树的结构完全由 parent_id 字段决定，与 node_id 的数值无关。
+
+    ---
+
+    【node_id 规则】
+
+    node_id 是节点的唯一标识符，格式为 n1、n2、n3，由系统自动分配，全局自增。
+    - 在 add_node 操作中，node_id 字段留空字符串 ""，系统会自动填入。
+    - 在 mark_stuck、mark_correct、mark_abandoned 操作中，node_id 必须填写思维树中已存在的节点 ID（从 JSON 结构中查找）。
 
     ---
 
     【字段说明】
-    
-    node_id：节点的唯一标识符，采用路径式命名，反映节点在树中的位置。
-    - 顶层思路分支：a1、a2，依次递增
-    - 某思路下的步骤：a1_s1、a1_s2，依次递增
-    - 某步骤下的分叉：a1_s2_b1、a1_s2_b2，依次递增
-    - 分叉下的后续步骤：a1_s2_b1_s1，依次类推
-    - 命名时必须根据 parent_id 推断当前节点所处的层级，确保命名与树结构一致
-    - 禁止重复使用已存在的 node_id
 
-    content：节点的内容描述。
-    - 思路分支节点：必须写明思路名称和核心特征，如"假设法：假设全部是鸡，共60只脚"
-    - 步骤节点：用一句话描述该步骤的具体操作，如"计算多余的脚数：60-80=-20"
+    content：用一句话描述该步骤的具体内容，必须来源于学生的实际表述。
 
     status：节点当前状态，只能是以下四种之一：
     - correct：该步骤在数学上是正确的
     - incorrect：该步骤存在错误
     - stuck：学生当前卡在这里，无法继续推进
-    - abandoned：学生已明确放弃该思路
+    - abandoned：学生已明确放弃从该节点开始的这条路
 
-    parent_id：父节点的node_id。
-    - 新建思路分支节点时，parent_id 为 null（直接挂在根节点下）
-    - 新建步骤节点时，parent_id 为该步骤在逻辑上的前驱节点的node_id，可以是思路分支节点，也可以是任意步骤节点
-    - 若学生从某个中间步骤出发尝试了不同的后续方法，应在该步骤节点下新建分支，而非创建新的顶层思路分支
+    parent_id：父节点的 node_id。
+    - 若该步骤是解题的起点（无前驱步骤），parent_id 为 null
+    - 若该步骤是对某个已有步骤的继续推进，parent_id 为该前驱步骤的 node_id
+    - 若学生从同一个步骤出发尝试了不同的后续方向，为每个方向分别新建子节点，它们共享同一个 parent_id
+    - 禁止跳层挂载：新节点的 parent_id 必须是其直接前驱步骤，不得跳过中间节点
 
-    error_type：用自然语言描述错误的具体原因，如"混淆了周长和面积的计算公式"。
+    error_type：用自然语言描述错误的具体原因。status 为 incorrect 或 stuck 时必填，其余情况填 null。
 
     ---
 
     【操作指令类型】
 
-    共四种，每次只输出一条，不要输出任何其他内容：
+    共四种，每次输出一个 JSON 数组，数组中可包含多条指令（按执行顺序排列）：
 
-    1. 新增节点（学生推进了新步骤，或切换了解题思路）：
+    1. 新增节点：
     {{
       "action": "add_node",
       "node": {{
-        "node_id": "...",
+        "node_id": "",
         "content": "...",
         "status": "correct 或 incorrect 或 stuck",
-        "parent_id": "... 或 null",
+        "parent_id": "已有节点的 node_id，或 null，或 __prev__",
         "error_type": "... 或 null"
       }}
     }}
@@ -87,18 +95,33 @@ STATE_TRACKER_PROMPT = ChatPromptTemplate.from_messages([
       "action": "mark_abandoned",
       "node_id": "..."
     }}
-    注意：mark_abandoned 可作用于任意节点，表示从该节点开始的整条路径被放弃，不限于顶层思路分支。
 
-    5. 无有效行为（学生只是表达困惑或闲聊，无法判断出任何解题行为）：
-    null
+    若学生只是表达困惑或闲聊，无法判断出任何解题行为，输出空数组：[]
 
     ---
 
     【重要规则】
-    1. 在新增节点前，必须先检查思维树中是否已存在语义相近的思路分支。若存在，优先在已有分支下新增步骤节点，而非创建新的思路分支。
-    2. mark_stuck 只用于学生在已有节点上再次卡住的情况，不用于新节点。
-    3. mark_abandoned 只作用于思路分支节点，不作用于步骤节点。
-    4. 节点 content 的内容必须来源于学生的实际表述。若学生表示完全没有思路，允许根据题目特征推断一个合理的起点思路新建节点，但必须在 content 开头加上"【引导方向】"前缀，例如："【引导方向】假设法：假设全部是鸡，共60只脚"，以区别于学生主动表述的步骤。
+
+    1. 每次输出必须是一个 JSON 数组，即使只有一条指令，也要用 [] 包裹。
+
+    2. 在新增节点前，先检查思维树中是否已存在语义相近的节点。若存在，优先在已有节点下新增子节点，而非重新创建起点节点。
+
+    3. 若学生在一次回答中完成了多个逻辑步骤，拆分为多条 add_node 指令，每条描述一个独立的推导步骤，后一条的 parent_id 填写 "__prev__"，表示"上一条新增节点的 ID"，系统会自动替换。
+       拆分的依据是逻辑跳跃，而非句子数量。若学生在一次回答中表达了一个完整的认知状态（如"知道A，但不知道B"、"发现了X，但无法判断Y"），应合并为单个节点，status 取卡住或错误的状态，content 完整描述该认知状态，不得强行拆分。
+
+    4. 判断学生输入的含义时，必须结合上一轮老师的问题（对话历史中最后一条 role 为"老师"的内容）。若老师刚刚提问了一个新问题，学生的回答应被理解为对该新问题的回答，而不是对之前错误的重复。禁止仅凭数值相同就判定为重复错误。
+
+    5. mark_stuck 只用于学生在已有节点上再次卡住的情况，不用于新节点。
+
+    6. 节点 content 的内容必须来源于学生的实际表述，不得包含老师的引导内容。
+    
+    7. 思维树只记录学生主动表达的认知步骤。老师问题中的提示、引导、已知条件的重述，以及学生尚未自主推导出的中间结论，禁止写入思维树。写入前必须自问：这个内容是学生在本轮回答中自己说出来的吗？若不是，不得写入。即使老师在上一轮已经告知了某个结论，只要学生本轮没有主动复述或运用它，也不得将其写入思维树。
+    
+    8. 思维树中始终存在一个固定根节点 n0（content="解题起点"），是整棵树的逻辑根。
+       - 当学生表示完全没有思路时，对 n0 执行 mark_stuck（不新建节点）。
+       - 当学生开始尝试某个解题方向时，新建子节点，parent_id 填 "n0"。
+       - 禁止修改 n0 的 content 和 parent_id。
+
     """),
     ("human", """【题目信息】
 {parsed_problem}
@@ -115,6 +138,9 @@ STATE_TRACKER_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 
+
+
+
 def _serialize_tree(thinking_tree: dict) -> str:
     """将思维树序列化为缩进大纲 + JSON 双格式，提升模型理解准确性"""
     if not thinking_tree:
@@ -128,18 +154,9 @@ def _serialize_tree(thinking_tree: dict) -> str:
     def build_outline(node_id: str, indent: int = 0):
         node = thinking_tree[node_id]
         prefix = "  " * indent + "└─ " if indent > 0 else ""
-
-        # 根据node_id判断节点类型
-        if "_" not in node_id:
-            node_type = "【思路分支】"
-        elif node_id.split("_")[-1].startswith("b"):
-            node_type = "【分叉】"
-        else:
-            node_type = "【步骤】"
-
         error_info = f" | 错误历史：{node.error_history}" if node.error_history else ""
         outline_lines.append(
-            f"{prefix}{node_type}[{node_id}] {node.content} ({node.status.value}){error_info}"
+            f"{prefix}[{node_id}] {node.content} ({node.status.value}){error_info}"
         )
         for child_id in node.children:
             build_outline(child_id, indent + 1)
@@ -158,7 +175,7 @@ def _serialize_tree(thinking_tree: dict) -> str:
             "children": node.children
         }
 
-    outline_lines.append("\n【JSON结构（用于操作node_id）】")
+    outline_lines.append("\n【JSON结构（用于引用 node_id）】")
     outline_lines.append(json.dumps(json_data, ensure_ascii=False, indent=2))
 
     return "\n".join(outline_lines)
@@ -199,30 +216,54 @@ def run_state_tracker(graph_state: "DialogueGraphState") -> "DialogueGraphState"
         "student_input": student_input
     })
 
-    if result is not None:
-        action = result.get("action")
+    # result 是一个操作指令列表（可能为空列表或 None）
+    if not result:
+        state.dialogue_history.append({"role": "学生", "content": student_input})
+        return {
+            "session_state": state,
+            "student_input": graph_state["student_input"],
+            "generated_question": graph_state["generated_question"],
+            "rejection_reason": graph_state["rejection_reason"],
+            "retry_count": graph_state["retry_count"],
+            "teaching_guidance": graph_state["teaching_guidance"]
+        }
+
+    # 记录本轮最后一个新增节点的 ID，用于解析 __prev__ 占位符
+    last_added_node_id: Optional[str] = None
+
+    for instruction in result:
+        action = instruction.get("action")
 
         if action == "add_node":
-            node_data = result["node"]
+            node_data = instruction["node"]
+
+            # 处理 parent_id 中的 __prev__ 占位符
+            parent_id = node_data.get("parent_id")
+            if parent_id == "__prev__":
+                parent_id = last_added_node_id
+
+            # 由代码自动生成 node_id
+            new_node_id = state.next_node_id()
+
             new_node = ThinkingNode(
-                node_id=node_data["node_id"],
+                node_id=new_node_id,
                 content=node_data["content"],
                 status=NodeStatus(node_data["status"]),
-                parent_id=node_data.get("parent_id"),
+                parent_id=parent_id,
                 error_history=[node_data["error_type"]] if node_data.get("error_type") else []
             )
             state.add_node(new_node)
-            state.last_updated_node_id = new_node.node_id
+            state.last_updated_node_id = new_node_id
+            last_added_node_id = new_node_id
 
-            # 新节点为卡点时，重置stuck信息（新卡点，从1开始）
+            # 新节点为卡点时，更新 stuck 信息
             if new_node.status == NodeStatus.STUCK:
-                state.current_stuck_node_id = new_node.node_id
+                state.current_stuck_node_id = new_node_id
                 state.stuck_count = 1
 
         elif action == "mark_stuck":
-            # 学生在已有节点上再次卡住，追加错误记录并递增stuck_count
-            node_id = result["node_id"]
-            error_type = result.get("error_type")
+            node_id = instruction["node_id"]
+            error_type = instruction.get("error_type")
             if error_type:
                 state.append_error(node_id, error_type)
             state.update_node_status(node_id, NodeStatus.STUCK)
@@ -235,17 +276,16 @@ def run_state_tracker(graph_state: "DialogueGraphState") -> "DialogueGraphState"
                 state.stuck_count = 1
 
         elif action == "mark_correct":
-            node_id = result["node_id"]
+            node_id = instruction["node_id"]
             state.update_node_status(node_id, NodeStatus.CORRECT)
             state.last_updated_node_id = node_id
 
-            # 卡点被解决，重置stuck信息
             if state.current_stuck_node_id == node_id:
                 state.current_stuck_node_id = None
                 state.stuck_count = 0
 
         elif action == "mark_abandoned":
-            node_id = result["node_id"]
+            node_id = instruction["node_id"]
             state.update_node_status(node_id, NodeStatus.ABANDONED)
             state.last_updated_node_id = node_id
 
@@ -254,13 +294,12 @@ def run_state_tracker(graph_state: "DialogueGraphState") -> "DialogueGraphState"
 
     return {
         "session_state": state,
-        "student_input": graph_state["student_input"],  # 保持不变
-        "generated_question": graph_state["generated_question"],  # 保持不变
-        "rejection_reason": graph_state["rejection_reason"],  # 保持不变
-        "retry_count": graph_state["retry_count"],  # 保持不变
-        "teaching_guidance": graph_state["teaching_guidance"] # 保持不变
+        "student_input": graph_state["student_input"],
+        "generated_question": graph_state["generated_question"],
+        "rejection_reason": graph_state["rejection_reason"],
+        "retry_count": graph_state["retry_count"],
+        "teaching_guidance": graph_state["teaching_guidance"]
     }
-
 
 
 if __name__ == '__main__':

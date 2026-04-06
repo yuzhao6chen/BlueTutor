@@ -100,7 +100,6 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
     # 测试
     # print(result)
 
-
     if result["passed"]:
         # 通过审核，清空打回原因和重试计数
         return {
@@ -114,19 +113,25 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
     else:
         # 未通过审核，记录打回原因，递增重试计数
         new_retry_count = retry_count + 1
-        # 超过最大重试次数，使用兜底问题
-        final_question = FALLBACK_QUESTION if new_retry_count > MAX_RETRY else question
-
         # 测试
         # print(graph_state["rejection_reason"] + [
         #     result["reason"]] if new_retry_count < MAX_RETRY else [])
 
+        # 已达最大重试次数，替换为兜底问题并清空 rejection_reason，让 should_retry 直接结束
+        if retry_count >= MAX_RETRY:
+            return {
+                "session_state": state,
+                "student_input": graph_state["student_input"],
+                "generated_question": FALLBACK_QUESTION,
+                "rejection_reason": [],
+                "retry_count": new_retry_count,
+                "teaching_guidance": graph_state["teaching_guidance"]
+            }
         return {
             "session_state": state,
             "student_input": graph_state["student_input"],
-            "generated_question": final_question,
-            "rejection_reason": graph_state["rejection_reason"] + [
-                result["reason"]] if new_retry_count <= MAX_RETRY else [],
+            "generated_question": question,
+            "rejection_reason": graph_state["rejection_reason"] + [result["reason"]],
             "retry_count": new_retry_count,
             "teaching_guidance": graph_state["teaching_guidance"]
         }
@@ -134,13 +139,13 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
 
 def should_retry(graph_state: "DialogueGraphState") -> str:
     """
-    条件边路由函数。
-    根据守门Agent的判断结果决定下一个节点。
+    条件边函数：判断是否需要重试。
+    rejection_reason 为空（通过审核或已触发兜底）则结束，否则重试。
     """
-    # 没有打回原因，说明通过了审核或已使用兜底问题
     if not graph_state["rejection_reason"]:
         return "end"
     return "question_generator"
+
 
 
 if __name__ == '__main__':

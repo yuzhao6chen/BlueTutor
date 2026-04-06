@@ -4,6 +4,12 @@ from phase1_parser.parser import parse_problem
 from phase2_dialogue.dialogue_graph_state import DialogueGraphState
 from phase2_dialogue.session_state import SessionState
 
+from phase2_dialogue.state_tracker import run_state_tracker
+from phase2_dialogue.situation_analyzer import run_situation_analyzer
+from phase2_dialogue.question_generator import run_question_generator
+from phase2_dialogue.guardrail import run_guardrail, should_retry
+
+
 
 def create_dialogue_graph():
     """构建对话循环的 LangGraph 工作流"""
