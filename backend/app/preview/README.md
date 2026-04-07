@@ -229,6 +229,8 @@ Prompt 设计要求：
 
 ### 4.4 [backend/app/preview/service.py](backend/app/preview/service.py)
 
+当前状态：已实现服务层编排，包含输入校验、模型结果结构化、本地 JSONL 日志记录和知识点 ID 生成。
+
 负责业务编排，是 Preview 模块的核心服务层。建议定义：
 
 1. `PreviewService`
@@ -250,6 +252,8 @@ Prompt 设计要求：
 
 ### 4.5 [backend/app/api/preview_api.py](backend/app/api/preview_api.py)
 
+当前状态：已实现 Preview 路由，提供 knowledge-points、chat 和 health 三个接口，并对业务异常返回稳定错误码。
+
 只负责路由和请求响应转换，不写 Prompt，不写模型调用细节。
 
 建议提供两个正式接口：
@@ -269,6 +273,8 @@ Prompt 设计要求：
 4. 捕获异常并返回稳定错误码。
 
 ### 4.6 [backend/app/main.py](backend/app/main.py)
+
+当前状态：已实现 FastAPI 应用入口，已注册 Preview 路由，并提供根路径和全局 health 检查接口。
 
 负责创建 FastAPI 应用并挂载路由。
 
@@ -429,9 +435,9 @@ Preview 模块只认下面这类输入：
 1. 已完成 [backend/app/preview/schema.py](backend/app/preview/schema.py)
 2. 已完成 [backend/app/preview/prompt.py](backend/app/preview/prompt.py)
 3. 已完成 [backend/app/preview/agent.py](backend/app/preview/agent.py)
-4. 再写 [backend/app/preview/service.py](backend/app/preview/service.py)
-5. 再写 [backend/app/api/preview_api.py](backend/app/api/preview_api.py)
-6. 最后在 [backend/app/main.py](backend/app/main.py) 注册路由
+4. 已完成 [backend/app/preview/service.py](backend/app/preview/service.py)
+5. 已完成 [backend/app/api/preview_api.py](backend/app/api/preview_api.py)
+6. 已完成 [backend/app/main.py](backend/app/main.py) 路由注册
 
 原因：
 
@@ -477,4 +483,7 @@ Preview 模块只认下面这类输入：
 2. 已完成 [backend/app/preview/schema.py](backend/app/preview/schema.py) 的请求响应模型定义。
 3. 已完成 [backend/app/preview/prompt.py](backend/app/preview/prompt.py) 的系统提示词与 JSON 输出约束。
 4. 已完成 [backend/app/preview/agent.py](backend/app/preview/agent.py) 的百炼模型调用封装。
-5. 待实现 service、api 与 main 接入。
+5. 已完成 [backend/app/preview/service.py](backend/app/preview/service.py) 的业务编排与日志落盘。
+6. 已完成 [backend/app/api/preview_api.py](backend/app/api/preview_api.py) 的接口定义与错误处理。
+7. 已完成 [backend/app/main.py](backend/app/main.py) 路由注册。
+8. 待完成真实 API 联调与整体验证。
