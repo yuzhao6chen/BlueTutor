@@ -1,81 +1,15 @@
 import json
-import os
 
-from dotenv import load_dotenv
-from langchain_community.chat_models import ChatTongyi
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import ChatPromptTemplate
 
+from llm_provider import get_llm
+from phase2_dialogue.prompts import REPORT_GENERATOR_PROMPT
 from phase2_dialogue.session_state import SessionState
 from phase2_dialogue.state_tracker import _serialize_tree, _serialize_dialogue
 
-load_dotenv()
+import logging
 
-REPORT_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """你是一位专业的数学教育分析师，负责在一次讲题对话结束后，生成一份结构化的讲题报告。
-
-你会收到以下信息：
-1. 题目信息（已知条件、求解目标、标准答案）
-2. 当前思维树（学生的完整解题思路，含每个节点的状态和错误历史）
-3. 完整对话历史
-
-你需要输出一个 JSON 对象，包含以下三个字段：
-
----
-
-【knowledge_tags】
-类型：字符串数组
-内容：这道题涉及的数学知识点或题型标签，用于后续生成相似题目和构建用户画像。
-要求：
-- 标签应简洁，每个标签不超过8个字
-- 标签数量控制在2-5个
-- 优先使用小学数学的标准术语，如"鸡兔同笼"、"假设法"、"方程思想"、"行程问题"等
-
----
-
-【error_profile】
-类型：对象数组，每个对象包含 error_type 和 detail 两个字段
-内容：对学生在本次解题过程中出现的所有错误的汇总分析
-要求：
-- error_type：简短的错误类型标签，如"概念混淆"、"计算失误"、"方法选择错误"、"理解题意有误"
-- detail：结合对话历史，用一句话描述该错误的具体表现
-- 若学生本次解题没有出现任何错误，输出空数组 []
-
----
-
-【independence_evaluation】
-类型：对象，包含 level 和 detail 两个字段
-内容：对学生本次解题独立性的评估
-要求：
-- level：必须从以下四个等级中选择一个：
-  "完全独立"（学生几乎不需要引导，自主完成解题）
-  "少量引导"（学生在个别步骤需要提示，整体较为独立）
-  "需要较多引导"（学生在多个步骤卡住，需要反复引导才能推进）
-  "高度依赖引导"（学生基本无法自主推进，几乎每步都需要提示）
-- detail：用一到两句话描述学生的具体表现，作为 level 判断的依据
-
----
-
-请严格按照以下 JSON 格式输出，不要输出任何其他内容：
-{{
-  "knowledge_tags": [...],
-  "error_profile": [...],
-  "independence_evaluation": {{
-    "level": "...",
-    "detail": "..."
-  }}
-}}
-"""),
-    ("human", """【题目信息】
-{parsed_problem}
-
-【当前思维树】
-{thinking_tree}
-
-【完整对话历史】
-{dialogue_history}
-""")
-])
+logger = logging.getLogger(__name__)
 
 
 def generate_report(session_state: SessionState) -> dict:
@@ -91,11 +25,7 @@ def generate_report(session_state: SessionState) -> dict:
     Raises:
         Exception: LLM 调用失败时直接抛出异常
     """
-    llm = ChatTongyi(
-        api_key=os.environ["DASHSCOPE_API_KEY"],
-        model="qwen-plus"
-    )
-
+    llm = get_llm()
     parser = JsonOutputParser()
     chain = REPORT_GENERATOR_PROMPT | llm | parser
 
@@ -128,6 +58,8 @@ def generate_report(session_state: SessionState) -> dict:
         "error_profile": llm_result["error_profile"],
         "independence_evaluation": llm_result["independence_evaluation"]
     }
+
+    logger.info("讲题报告生成完成，知识点标签：%s", llm_output.get("knowledge_tags", []))
 
     return report
 

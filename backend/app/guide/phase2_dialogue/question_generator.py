@@ -1,67 +1,14 @@
 import json
-import os
 
-from dotenv import load_dotenv
-from langchain_community.chat_models import ChatTongyi
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
 
+from llm_provider import get_llm
 from phase2_dialogue.dialogue_graph_state import DialogueGraphState
+from phase2_dialogue.prompts import QUESTION_GENERATOR_PROMPT
 
-load_dotenv()
+import logging
 
-QUESTION_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """你是一位经验丰富、富有同理心的苏格拉底式数学教师，擅长通过提问引导小学生自主思考。
-
-你会收到以下信息：
-1. 题目信息（已知条件、求解目标、标准答案）
-2. 当前思维树（学生的解题思路和当前卡点）
-3. 完整对话历史
-4. 当前卡点被引导的次数（stuck_count）
-5. 情境分析与教学建议（对学生当前状态的判断，以及对你本次回复的具体指导）
-
-你的任务是根据以上信息，生成一段回复，发送给学生。
-
-【回复原则】
-1. 严格遵照【情境分析与教学建议】中的指导，调整语气、引导力度和是否给予情感支持
-2. 如果建议中提到学生答对了某步骤，必须先给予明确、真诚的肯定，再引导下一步
-3. 如果建议中提到学生情绪低落或沮丧，必须先给予温暖的鼓励，再提出问题
-4. 引导问题只针对当前卡点，不跳步，不超前
-5. 绝对不能直接给出答案，也不能暗示答案（除非情境分析明确允许给出具体提示）
-6. 一次只问一件事，问题简洁明了
-7. 语气亲切自然，符合与小学生对话的风格，可以使用"我们"、"你试试看"等拉近距离的表达
-8. 严格禁止跳步：回复中出现的每一个数值、分数或表达式，必须是学生在对话历史中已经明确说出或确认过的内容。若某个中间结论学生尚未推导出，不得在回复中直接使用，只能通过提问引导学生自己得出。
-
-【根据stuck_count调整引导力度】
-- stuck_count 为 1-2 次：提出抽象的启发性问题，如"你觉得下一步应该做什么？"
-- stuck_count 为 3 次及以上：可以给出该步骤的具体提示，但仍不能给出最终答案
-
-【输出格式】
-直接输出发送给学生的完整回复，可以包含肯定、鼓励和引导问题，不要输出任何分析、标注或前缀。
-"""),
-    ("human", """【题目信息】
-{parsed_problem}
-
-【当前思维树】
-{thinking_tree}
-
-【对话历史】
-{dialogue_history}
-
-【当前卡点被引导次数】
-{stuck_count}
-
-【本轮最新操作的节点】
-{last_updated_node_id}
-
-【上次被打回的原因（如有）】
-{rejection_reason}
-
-【情境分析与教学建议】
-{teaching_guidance}
-""")
-
-])
+logger = logging.getLogger(__name__)
 
 
 def run_question_generator(graph_state: "DialogueGraphState") -> "DialogueGraphState":
@@ -73,10 +20,7 @@ def run_question_generator(graph_state: "DialogueGraphState") -> "DialogueGraphS
 
     state = graph_state["session_state"]
 
-    llm = ChatTongyi(
-        api_key=os.environ["DASHSCOPE_API_KEY"],
-        model="qwen-plus"
-    )
+    llm = get_llm()
 
     chain = QUESTION_GENERATOR_PROMPT | llm | StrOutputParser()
 
@@ -93,13 +37,15 @@ def run_question_generator(graph_state: "DialogueGraphState") -> "DialogueGraphS
         "teaching_guidance": graph_state["teaching_guidance"] if graph_state["teaching_guidance"] else "无"
     })
 
+    logger.debug("Question Generator 完成，生成问题：%s", result.strip()[:50])
+
     return {
         "session_state": state,
         "student_input": graph_state["student_input"],  # 保持不变
         "generated_question": result.strip(),
         "rejection_reason": graph_state["rejection_reason"],  # 保持不变
         "retry_count": graph_state["retry_count"],  # 保持不变
-        "teaching_guidance": graph_state["teaching_guidance"] # 保持不变
+        "teaching_guidance": graph_state["teaching_guidance"]  # 保持不变
     }
 
 

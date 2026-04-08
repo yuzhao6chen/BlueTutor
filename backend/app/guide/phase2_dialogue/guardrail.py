@@ -1,71 +1,16 @@
-import os
-
-from dotenv import load_dotenv
-from langchain_community.chat_models import ChatTongyi
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import ChatPromptTemplate
 
+from llm_provider import get_llm
 from phase2_dialogue.dialogue_graph_state import DialogueGraphState
+from phase2_dialogue.prompts import GUARDRAIL_PROMPT
 from phase2_dialogue.state_tracker import _serialize_dialogue
 
-load_dotenv()
+import logging
+
+logger = logging.getLogger(__name__)
 
 MAX_RETRY = 4  # 守门Agent最大打回次数
 FALLBACK_QUESTION = "你觉得下一步应该怎么做呢？"  # 超过重试次数后的兜底问题
-
-GUARDRAIL_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """你是一位严格但有经验的教学质量审核员，负责检查教师提出的引导回复是否符合苏格拉底式教学原则。
-
-你会收到以下信息：
-1. 题目的标准答案
-2. 完整对话历史（包含所有轮次的学生回答和教师回复）
-3. 待审核的教师回复
-4. 如果是重写请求，还会收到上次被打回的原因
-5. 情境分析与教学建议（说明当前学生状态及允许的引导力度）
-
-【审核标准】
-以下任意一条成立，则判定为"不合格"：
-- 直接给出了最终答案
-- 给出了题目中未出现的、学生尚未推导出的中间计算结果（如直接说出"多出20只脚"）
-- 直接给出了完整的解题步骤或方程，使学生无需思考即可照做
-- 情境分析建议中未明确允许具体提示时，暗示了特定的代数设定（如"设鸡为x只"）
-
-以下情况判定为"合格"：
-- 引用了题目原文中已有的已知条件（如速度比5:4、共30个头），不属于泄题
-- 复述或确认了学生在对话历史中任意一轮已经说出或推导出的内容，属于承接而非泄题
-- 对学生的正确回答给予肯定，并在此基础上引导下一步思考，不属于泄题
-- 情境分析建议中明确允许给出具体提示时，给出了方向性提示但未给出最终答案
-
-请严格按照以下 JSON 格式输出，不要输出任何其他内容：
-
-通过审核时：
-{{
-  "passed": true,
-  "reason": null
-}}
-
-    未通过审核时：
-{{
-  "passed": false,
-  "reason": "具体说明哪里泄题了，以便提问生成Agent修正"
-}}
-"""),
-    ("human", """【标准答案】
-{answer}
-
-【完整对话历史】
-{dialogue_history}
-
-【待审核的教师回复】
-{question}
-
-【上次被打回的原因（如有）】
-{previous_rejection}
-
-【情境分析与教学建议】
-{teaching_guidance}
-""")
-])
 
 
 def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
@@ -78,11 +23,7 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
     question = graph_state["generated_question"]
     retry_count = graph_state["retry_count"]
 
-    llm = ChatTongyi(
-        api_key=os.environ["DASHSCOPE_API_KEY"],
-        model="qwen-plus"
-    )
-
+    llm = get_llm()
     parser = JsonOutputParser()
     chain = GUARDRAIL_PROMPT | llm | parser
 
@@ -102,6 +43,8 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
 
     if result["passed"]:
         # 通过审核，清空打回原因和重试计数
+        logger.info("Guardrail 审核通过，问题：%s", question[:50])
+
         return {
             "session_state": state,
             "student_input": graph_state["student_input"],
@@ -119,6 +62,8 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
 
         # 已达最大重试次数，替换为兜底问题并清空 rejection_reason，让 should_retry 直接结束
         if retry_count >= MAX_RETRY:
+            logger.warning("Guardrail 触发兜底，已达最大重试次数 %d", MAX_RETRY)
+
             return {
                 "session_state": state,
                 "student_input": graph_state["student_input"],
@@ -127,6 +72,9 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
                 "retry_count": new_retry_count,
                 "teaching_guidance": graph_state["teaching_guidance"]
             }
+
+        logger.info("Guardrail 打回（第 %d 次），原因：%s", retry_count + 1, result.get("rejection_reason", ""))
+
         return {
             "session_state": state,
             "student_input": graph_state["student_input"],
@@ -145,7 +93,6 @@ def should_retry(graph_state: "DialogueGraphState") -> str:
     if not graph_state["rejection_reason"]:
         return "end"
     return "question_generator"
-
 
 
 if __name__ == '__main__':
