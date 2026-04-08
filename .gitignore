@@ -20,6 +20,7 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+backend/tests/
 
 # ===== Node / Frontend =====
 node_modules/
@@ -47,6 +48,7 @@ Thumbs.db
 *.db
 tmp/
 temp/
+backend/data/preview_logs/
 
 # ===== Jupyter =====
 .ipynb_checkpoints/
