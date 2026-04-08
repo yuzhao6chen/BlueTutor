@@ -27,6 +27,7 @@ class SessionState:
     """完整的会话状态对象"""
     # 第一阶段输出（固定不变）
     parsed_problem: dict
+    raw_problem: str = ""   # 原始题目文本，用于讲题报告
 
     # 思维树：以节点ID为键的字典，便于O(1)查找
     thinking_tree: dict[str, ThinkingNode] = field(default_factory=dict)

@@ -66,7 +66,7 @@ STATE_TRACKER_PROMPT = ChatPromptTemplate.from_messages([
     - 平行分叉：两步是对同一问题的两种独立尝试，互不依赖，或学生明确切换了方向（如"换一种方法"、"或者"）。此时两步共享同一 parent_id。
 
 
-    error_type：用自然语言描述错误的具体原因。status 为 incorrect 或 stuck 时必填，其余情况填 null。
+    error_type：用简短的短语描述错误类型，避免写入推理过程。status 为 incorrect 或 stuck 时必填，其余情况填 null。
 
     ---
 

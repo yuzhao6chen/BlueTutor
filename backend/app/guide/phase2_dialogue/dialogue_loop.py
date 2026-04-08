@@ -54,7 +54,7 @@ def start_session(problem_text: str) -> tuple[SessionState, object]:
         (初始化好的 SessionState, 编译好的对话图)
     """
     parsed = parse_problem(problem_text)
-    state = SessionState(parsed_problem=parsed)
+    state = SessionState(parsed_problem=parsed, raw_problem=problem_text)
     graph = create_dialogue_graph()
     return state, graph
 
