@@ -92,3 +92,53 @@ class SessionState:
         """向节点的错误历史中追加一条错误记录"""
         if node_id in self.thinking_tree:
             self.thinking_tree[node_id].error_history.append(error_type)
+
+    def to_dict(self) -> dict:
+        """将 SessionState 序列化为可 JSON 持久化的字典"""
+        return {
+            "raw_problem": self.raw_problem,
+            "parsed_problem": self.parsed_problem,
+            "thinking_tree": {
+                node_id: {
+                    "node_id": node.node_id,
+                    "content": node.content,
+                    "status": node.status.value,
+                    "parent_id": node.parent_id,
+                    "error_history": node.error_history,
+                    "children": node.children,
+                }
+                for node_id, node in self.thinking_tree.items()
+            },
+            "dialogue_history": self.dialogue_history,
+            "current_stuck_node_id": self.current_stuck_node_id,
+            "stuck_count": self.stuck_count,
+            "last_updated_node_id": self.last_updated_node_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SessionState":
+        """从持久化字典还原 SessionState 实例"""
+        # 先还原 thinking_tree
+        thinking_tree = {
+            node_id: ThinkingNode(
+                node_id=node_data["node_id"],
+                content=node_data["content"],
+                status=NodeStatus(node_data["status"]),
+                parent_id=node_data["parent_id"],
+                error_history=node_data["error_history"],
+                children=node_data["children"],
+            )
+            for node_id, node_data in data["thinking_tree"].items()
+        }
+
+        # 使用 object.__setattr__ 绕过 __post_init__ 的自动初始化逻辑
+        # 因为 thinking_tree 已经有数据，不需要重新创建 n0 根节点
+        instance = cls.__new__(cls)
+        object.__setattr__(instance, "raw_problem", data["raw_problem"])
+        object.__setattr__(instance, "parsed_problem", data["parsed_problem"])
+        object.__setattr__(instance, "thinking_tree", thinking_tree)
+        object.__setattr__(instance, "dialogue_history", data["dialogue_history"])
+        object.__setattr__(instance, "current_stuck_node_id", data["current_stuck_node_id"])
+        object.__setattr__(instance, "stuck_count", data["stuck_count"])
+        object.__setattr__(instance, "last_updated_node_id", data["last_updated_node_id"])
+        return instance

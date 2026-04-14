@@ -49,6 +49,7 @@ Thumbs.db
 tmp/
 temp/
 backend/data/preview_logs/
+backend/app/guide/data
 
 # ===== Jupyter =====
 .ipynb_checkpoints/

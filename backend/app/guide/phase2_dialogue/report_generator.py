@@ -2,10 +2,10 @@ import json
 
 from langchain_core.output_parsers import JsonOutputParser
 
-from llm_provider import get_llm
-from phase2_dialogue.prompts import REPORT_GENERATOR_PROMPT
-from phase2_dialogue.session_state import SessionState
-from phase2_dialogue.state_tracker import _serialize_tree, _serialize_dialogue
+from ..llm_provider import get_llm
+from .prompts import REPORT_GENERATOR_PROMPT
+from .session_state import SessionState
+from .state_tracker import _serialize_tree, _serialize_dialogue
 
 import logging
 
@@ -59,7 +59,7 @@ def generate_report(session_state: SessionState) -> dict:
         "independence_evaluation": llm_result["independence_evaluation"]
     }
 
-    logger.info("讲题报告生成完成，知识点标签：%s", llm_output.get("knowledge_tags", []))
+    logger.info("讲题报告生成完成，知识点标签：%s", llm_result.get("knowledge_tags", []))
 
     return report
 
