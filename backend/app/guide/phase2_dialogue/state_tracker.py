@@ -108,7 +108,12 @@ def run_state_tracker(graph_state: "DialogueGraphState") -> "DialogueGraphState"
             # 处理 parent_id 中的 __prev__ 占位符
             parent_id = node_data.get("parent_id")
             if parent_id == "__prev__":
-                parent_id = last_added_node_id
+                if last_added_node_id is not None:
+                    # 本轮已有前驱节点，挂在前驱节点下（原有逻辑，正确）
+                    parent_id = last_added_node_id
+                else:
+                    # 本轮第一条指令误用了 __prev__，回退到上一轮最后操作的节点
+                    parent_id = state.last_updated_node_id
 
             # 由代码自动生成 node_id
             new_node_id = state.next_node_id()

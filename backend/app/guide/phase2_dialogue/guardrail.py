@@ -73,7 +73,7 @@ def run_guardrail(graph_state: "DialogueGraphState") -> "DialogueGraphState":
                 "teaching_guidance": graph_state["teaching_guidance"]
             }
 
-        logger.info("Guardrail 打回（第 %d 次），原因：%s", retry_count + 1, result.get("rejection_reason", ""))
+        logger.info("Guardrail 打回（第 %d 次），原因：%s", retry_count + 1, result.get("reason", ""))
 
         return {
             "session_state": state,

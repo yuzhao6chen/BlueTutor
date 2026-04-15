@@ -4,7 +4,6 @@ from typing import Any
 
 from dotenv import load_dotenv
 from langchain_community.chat_models import ChatTongyi
-from pydantic import SecretStr
 
 load_dotenv(Path(__file__).with_name(".env"), override=True)
 
@@ -19,7 +18,7 @@ def get_llm() -> Any:
     Returns:
         带重试的 ChatTongyi 实例
     """
-    print(os.getenv("DASHSCOPE_API_KEY", "").strip())  # 调试输出，确认环境变量是否正确加载
+    # print(os.getenv("DASHSCOPE_API_KEY", "").strip())  # 调试输出，确认环境变量是否正确加载
     global _llm_instance
     if _llm_instance is None:
         api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
