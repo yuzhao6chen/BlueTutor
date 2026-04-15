@@ -1,8 +1,8 @@
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 
-from llm_provider import get_llm
-from phase1_parser.prompts import PARSE_PROMPT
+from ..llm_provider import get_llm
+from .prompts import PARSE_PROMPT
 
 
 # 定义输出的数据结构

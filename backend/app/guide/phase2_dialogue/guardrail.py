@@ -1,9 +1,9 @@
 from langchain_core.output_parsers import JsonOutputParser
 
-from llm_provider import get_llm
-from phase2_dialogue.dialogue_graph_state import DialogueGraphState
-from phase2_dialogue.prompts import GUARDRAIL_PROMPT
-from phase2_dialogue.state_tracker import _serialize_dialogue
+from ..llm_provider import get_llm
+from .dialogue_graph_state import DialogueGraphState
+from .prompts import GUARDRAIL_PROMPT
+from .state_tracker import _serialize_dialogue
 
 import logging
 

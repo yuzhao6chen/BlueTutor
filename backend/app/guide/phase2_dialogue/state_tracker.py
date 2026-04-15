@@ -3,10 +3,10 @@ from typing import Optional
 
 from langchain_core.output_parsers import JsonOutputParser
 
-from llm_provider import get_llm
-from phase2_dialogue.dialogue_graph_state import DialogueGraphState
-from phase2_dialogue.prompts import STATE_TRACKER_PROMPT
-from phase2_dialogue.session_state import SessionState, ThinkingNode, NodeStatus
+from ..llm_provider import get_llm
+from .dialogue_graph_state import DialogueGraphState
+from .prompts import STATE_TRACKER_PROMPT
+from .session_state import SessionState, ThinkingNode, NodeStatus
 
 import logging
 

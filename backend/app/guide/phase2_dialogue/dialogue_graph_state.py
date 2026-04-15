@@ -2,7 +2,7 @@ from typing import List
 
 from typing_extensions import TypedDict
 
-from phase2_dialogue.session_state import SessionState
+from .session_state import SessionState
 
 
 class DialogueGraphState(TypedDict):

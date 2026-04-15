@@ -2,9 +2,9 @@ import json
 
 from langchain_core.output_parsers import StrOutputParser
 
-from llm_provider import get_llm
-from phase2_dialogue.dialogue_graph_state import DialogueGraphState
-from phase2_dialogue.prompts import SITUATION_ANALYZER_PROMPT
+from ..llm_provider import get_llm
+from .dialogue_graph_state import DialogueGraphState
+from .prompts import SITUATION_ANALYZER_PROMPT
 
 import logging
 
@@ -16,7 +16,7 @@ def run_situation_analyzer(graph_state: "DialogueGraphState") -> "DialogueGraphS
     情境分析Agent节点函数。
     分析学生的解题状态与情绪状态，生成教学指导意见，写入图状态。
     """
-    from phase2_dialogue.state_tracker import _serialize_tree, _serialize_dialogue
+    from .state_tracker import _serialize_tree, _serialize_dialogue
 
     state = graph_state["session_state"]
 

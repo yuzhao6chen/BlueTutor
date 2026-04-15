@@ -1,8 +1,8 @@
-from phase1_parser.parser import parse_problem
-from phase2_dialogue.dialogue_graph_state import DialogueGraphState
-from phase2_dialogue.dialogue_loop import create_dialogue_graph
-from phase2_dialogue.report_generator import generate_report
-from phase2_dialogue.session_state import SessionState
+from .phase1_parser.parser import parse_problem
+from .phase2_dialogue.dialogue_graph_state import DialogueGraphState
+from .phase2_dialogue.dialogue_loop import create_dialogue_graph
+from .phase2_dialogue.report_generator import generate_report
+from .phase2_dialogue.session_state import SessionState
 
 import logging
 

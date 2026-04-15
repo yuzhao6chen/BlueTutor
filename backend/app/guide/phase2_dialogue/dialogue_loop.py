@@ -1,10 +1,10 @@
 from langgraph.graph import StateGraph, END
 
-from phase2_dialogue.dialogue_graph_state import DialogueGraphState
-from phase2_dialogue.state_tracker import run_state_tracker
-from phase2_dialogue.situation_analyzer import run_situation_analyzer
-from phase2_dialogue.question_generator import run_question_generator
-from phase2_dialogue.guardrail import run_guardrail, should_retry
+from .dialogue_graph_state import DialogueGraphState
+from .state_tracker import run_state_tracker
+from .situation_analyzer import run_situation_analyzer
+from .question_generator import run_question_generator
+from .guardrail import run_guardrail, should_retry
 
 
 def create_dialogue_graph():

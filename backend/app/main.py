@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from .api.preview_api import preview_router
+from .api.guide_api import guide_router
 
 
 app = FastAPI(
@@ -12,6 +13,7 @@ app = FastAPI(
 )
 
 app.include_router(preview_router)
+app.include_router(guide_router)
 
 
 @app.get("/")
