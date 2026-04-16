@@ -1,6 +1,6 @@
 from .phase1_parser.parser import parse_problem
 from .phase2_dialogue.dialogue_graph_state import DialogueGraphState
-from .phase2_dialogue.dialogue_loop import create_dialogue_graph
+from .phase2_dialogue.dialogue_loop import create_dialogue_graph, create_pre_graph
 from .phase2_dialogue.report_generator import generate_report
 from .phase2_dialogue.session_state import SessionState
 
@@ -35,6 +35,7 @@ class SocraticTutorSession:
             parsed = parse_problem(problem_text)
             self._state = SessionState(parsed_problem=parsed, raw_problem=problem_text)
             self._graph = create_dialogue_graph()
+            self._pre_graph = create_pre_graph()
             logger.info("会话初始化完成，题目：%s", problem_text[:30])
         except Exception as e:
             raise TutorSessionError(f"会话初始化失败：{e}") from e
@@ -77,6 +78,95 @@ class SocraticTutorSession:
             return final_question
         except Exception as e:
             raise TutorSessionError(f"对话执行失败：{e}") from e
+
+    def run_one_turn_stream(self, student_input: str):
+        """
+        执行对话循环的一轮（流式版本）。
+
+        流程：
+        1. 同步执行前段子图（State Tracker → Situation Analyzer）
+        2. 在图外循环执行 Question Generator（流式）+ Guardrail：
+           - Guardrail 通过 → yield 所有 Token，结束
+           - Guardrail 打回 → yield 一个 retry 事件标记，重新生成
+        3. 更新 self._state
+
+        Yields:
+            str: 老师回复的每个 Token，或特殊标记 "__RETRY__" 表示打回重试
+
+        Raises:
+            TutorSessionError: LLM 调用或图执行失败时抛出
+        """
+        from .phase2_dialogue.question_generator import stream_question_generator
+        from .phase2_dialogue.guardrail import run_guardrail, should_retry, MAX_RETRY, FALLBACK_QUESTION
+        from .phase2_dialogue.dialogue_graph_state import DialogueGraphState
+
+        try:
+            logger.info("开始执行第 %d 轮对话（流式）", len(self._state.dialogue_history) // 2 + 1)
+
+            # ── 第一段：同步执行前段子图 ──────────────────────────────
+            graph_state = DialogueGraphState(
+                session_state=self._state,
+                student_input=student_input,
+                generated_question="",
+                rejection_reason=[],
+                retry_count=0,
+                teaching_guidance=""
+            )
+            pre_result = self._pre_graph.invoke(graph_state)
+
+            # ── 第二段：流式生成 + Guardrail 循环 ────────────────────
+            rejection_reason = []
+            retry_count = 0
+            final_question = ""
+
+            while True:
+                # 将当前 rejection_reason 注入 graph_state，供 Question Generator 参考
+                pre_result["rejection_reason"] = rejection_reason
+                pre_result["retry_count"] = retry_count
+
+                # 流式生成，同时拼接完整文字
+                tokens = []
+                for token in stream_question_generator(pre_result):
+                    tokens.append(token)
+
+                full_text = "".join(tokens).strip()
+
+                # 触发兜底：超过最大重试次数
+                if retry_count >= MAX_RETRY:
+                    full_text = FALLBACK_QUESTION
+                    final_question = full_text
+                    # 推送兜底文字（逐字符 yield，保持流式体验）
+                    for ch in full_text:
+                        yield ch
+                    break
+
+                # Guardrail 检查
+                pre_result["generated_question"] = full_text
+                guardrail_result = run_guardrail(pre_result)
+
+                if should_retry(guardrail_result) == "end":
+                    # 通过审核，正式推送所有 Token
+                    final_question = full_text
+                    for token in tokens:
+                        yield token
+                    break
+                else:
+                    # 打回：通知前端清空，准备重试
+                    yield "__RETRY__"
+                    rejection_reason = guardrail_result["rejection_reason"]
+                    retry_count = guardrail_result["retry_count"]
+                    logger.info("Guardrail 打回（第 %d 次），准备重试", retry_count)
+
+            # ── 更新会话状态 ──────────────────────────────────────────
+            guardrail_result["session_state"].dialogue_history.append(
+                {"role": "tutor", "content": final_question}
+            )
+            self._state = guardrail_result["session_state"]
+
+            logger.info("本轮对话完成（流式），老师问题：%s", final_question[:50])
+
+        except Exception as e:
+            raise TutorSessionError(f"对话执行失败（流式）：{e}") from e
 
     def generate_report(self) -> dict:
         """

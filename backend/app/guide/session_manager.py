@@ -4,7 +4,7 @@ from datetime import datetime
 
 from .session import SocraticTutorSession
 from .session_store import add_to_index, load_session, save_session
-from .phase2_dialogue.dialogue_loop import create_dialogue_graph
+from .phase2_dialogue.dialogue_loop import create_dialogue_graph, create_pre_graph
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,7 @@ def get_session(session_id: str) -> SocraticTutorSession:
     session = SocraticTutorSession.__new__(SocraticTutorSession)
     session._state = state
     session._graph = create_dialogue_graph()
+    session._pre_graph = create_pre_graph()
 
     _cache[session_id] = session
     logger.info("会话已从文件恢复并写入缓存：%s", session_id)
@@ -97,6 +98,32 @@ def run_turn(session_id: str, student_input: str) -> str:
     save_session(session_id, session._state)
 
     return question
+
+
+def run_turn_stream(session_id: str, student_input: str):
+    """
+    执行一轮对话（流式版本），返回生成器。
+
+    调用方必须完整迭代生成器，否则会话状态不会被更新。
+
+    Args:
+        session_id: 会话唯一标识
+        student_input: 学生的输入文本
+
+    Yields:
+        str: 老师回复的每个 Token，或 "__RETRY__" 表示打回重试
+
+    Raises:
+        KeyError: 会话不存在时抛出
+        TutorSessionError: 对话执行失败时抛出
+    """
+    session = get_session(session_id)
+
+    # run_one_turn_stream 是生成器函数，迭代完成后状态才会更新
+    yield from session.run_one_turn_stream(student_input)
+
+    # 每轮结束后持久化（生成器迭代完毕，状态已更新）
+    save_session(session_id, session._state)
 
 
 def generate_report(session_id: str) -> dict:

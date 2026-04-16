@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
+from fastapi.responses import StreamingResponse
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -21,7 +23,9 @@ from ..guide.session_manager import (
     get_session_detail,
     get_thinking_tree,
     run_turn,
+    run_turn_stream,
 )
+
 from ..guide.session_store import list_sessions
 
 logger = logging.getLogger(__name__)
@@ -54,7 +58,8 @@ def get_session(session_id: str) -> Any:
     try:
         return get_session_detail(session_id)
     except KeyError:
-        return JSONResponse(status_code=404, content={"code": 4041, "message": f"会话不存在：{session_id}", "data": None})
+        return JSONResponse(status_code=404,
+                            content={"code": 4041, "message": f"会话不存在：{session_id}", "data": None})
 
 
 @guide_router.get("/sessions/{session_id}/thinking-tree")
@@ -63,7 +68,8 @@ def get_session_thinking_tree(session_id: str) -> Any:
     try:
         return get_thinking_tree(session_id)
     except KeyError:
-        return JSONResponse(status_code=404, content={"code": 4042, "message": f"会话不存在：{session_id}", "data": None})
+        return JSONResponse(status_code=404,
+                            content={"code": 4042, "message": f"会话不存在：{session_id}", "data": None})
 
 
 @guide_router.post("/sessions/{session_id}/turns", response_model=RunTurnResponse)
@@ -73,10 +79,52 @@ def post_run_turn(session_id: str, body: RunTurnRequest) -> Any:
         question = run_turn(session_id, body.student_input)
         return RunTurnResponse(data=RunTurnData(question=question))
     except KeyError:
-        return JSONResponse(status_code=404, content={"code": 4043, "message": f"会话不存在：{session_id}", "data": None})
+        return JSONResponse(status_code=404,
+                            content={"code": 4043, "message": f"会话不存在：{session_id}", "data": None})
     except TutorSessionError as e:
         logger.error("对话执行失败 [%s]：%s", session_id, e)
         return JSONResponse(status_code=500, content={"code": 5001, "message": str(e), "data": None})
+
+
+@guide_router.post("/sessions/{session_id}/turns/stream")
+def post_run_turn_stream(session_id: str, body: RunTurnRequest) -> StreamingResponse:
+    """执行一轮对话（SSE 流式版本）
+
+    事件类型：
+    - token:  {"token": "文字片段"}
+    - retry:  {"attempt": 1}  — Guardrail 打回，前端应清空已显示内容
+    - done:   {}              — 本轮结束
+    - error:  {"message": "错误描述"}
+    """
+
+    def event_generator():
+        try:
+            for chunk in run_turn_stream(session_id, body.student_input):
+                if chunk == "__RETRY__":
+                    # Guardrail 打回事件
+                    yield f"event: retry\ndata: {{}}\n\n"
+                else:
+                    # 普通 Token 事件
+                    payload = json.dumps({"token": chunk}, ensure_ascii=False)
+                    yield f"event: token\ndata: {payload}\n\n"
+            # 本轮正常结束
+            yield "event: done\ndata: {}\n\n"
+        except KeyError:
+            payload = json.dumps({"message": f"会话不存在：{session_id}"}, ensure_ascii=False)
+            yield f"event: error\ndata: {payload}\n\n"
+        except Exception as e:
+            logger.error("流式对话执行失败 [%s]：%s", session_id, e)
+            payload = json.dumps({"message": str(e)}, ensure_ascii=False)
+            yield f"event: error\ndata: {payload}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # 禁用 Nginx 缓冲，确保实时推送
+        }
+    )
 
 
 @guide_router.post("/sessions/{session_id}/report")
@@ -85,7 +133,8 @@ def post_generate_report(session_id: str) -> Any:
     try:
         return generate_report(session_id)
     except KeyError:
-        return JSONResponse(status_code=404, content={"code": 4044, "message": f"会话不存在：{session_id}", "data": None})
+        return JSONResponse(status_code=404,
+                            content={"code": 4044, "message": f"会话不存在：{session_id}", "data": None})
     except TutorSessionError as e:
         logger.error("报告生成失败 [%s]：%s", session_id, e)
         return JSONResponse(status_code=500, content={"code": 5002, "message": str(e), "data": None})

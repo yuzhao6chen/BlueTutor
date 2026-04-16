@@ -49,6 +49,44 @@ def run_question_generator(graph_state: "DialogueGraphState") -> "DialogueGraphS
     }
 
 
+def stream_question_generator(graph_state: "DialogueGraphState"):
+    """
+    流式版本的提问生成函数。
+
+    接收已经过 State Tracker + Situation Analyzer 处理的 graph_state，
+    以生成器形式逐 Token yield 文字。
+
+    Args:
+        graph_state: 包含 teaching_guidance、rejection_reason 等上下文的图状态
+
+    Yields:
+        str: 老师回复的每个 Token
+    """
+    from .state_tracker import _serialize_tree, _serialize_dialogue
+
+    state = graph_state["session_state"]
+    llm = get_llm()
+
+    inputs = {
+        "parsed_problem": json.dumps(state.parsed_problem, ensure_ascii=False),
+        "thinking_tree": _serialize_tree(state.thinking_tree),
+        "dialogue_history": _serialize_dialogue(state.dialogue_history),
+        "stuck_count": state.stuck_count,
+        "last_updated_node_id": state.last_updated_node_id if state.last_updated_node_id else "无",
+        "rejection_reason": "\n".join(
+            f"{i + 1}. {reason}"
+            for i, reason in enumerate(graph_state["rejection_reason"])
+        ) if graph_state["rejection_reason"] else "无",
+        "teaching_guidance": graph_state["teaching_guidance"] if graph_state["teaching_guidance"] else "无"
+    }
+
+    chain = QUESTION_GENERATOR_PROMPT | llm | StrOutputParser()
+
+    for token in chain.stream(inputs):
+        yield token
+
+
+
 if __name__ == '__main__':
     from phase2_dialogue.session_state import SessionState
     from phase2_dialogue.state_tracker import run_state_tracker
