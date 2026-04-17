@@ -14,12 +14,12 @@ class NodeStatus(str, Enum):
 @dataclass
 class ThinkingNode:
     """思维树的单个节点"""
-    node_id: str                              # 节点唯一标识
-    content: str                              # 节点描述
-    status: NodeStatus                        # 节点当前状态
-    parent_id: Optional[str] = None          # 父节点ID，根节点为None
+    node_id: str  # 节点唯一标识
+    content: str  # 节点描述
+    status: NodeStatus  # 节点当前状态
+    parent_id: Optional[str] = None  # 父节点ID，根节点为None
     error_history: list[str] = field(default_factory=list)  # 错误历史列表，按时间顺序追加
-    children: list[str] = field(default_factory=list)       # 子节点ID列表
+    children: list[str] = field(default_factory=list)  # 子节点ID列表
 
 
 @dataclass
@@ -27,7 +27,7 @@ class SessionState:
     """完整的会话状态对象"""
     # 第一阶段输出（固定不变）
     parsed_problem: dict
-    raw_problem: str = ""   # 原始题目文本，用于讲题报告
+    raw_problem: str = ""  # 原始题目文本，用于讲题报告
 
     # 思维树：以节点ID为键的字典，便于O(1)查找
     thinking_tree: dict[str, ThinkingNode] = field(default_factory=dict)
@@ -43,6 +43,12 @@ class SessionState:
 
     # 记录最新被操作的节点ID
     last_updated_node_id: Optional[str] = None
+
+    # 标记题目是否已被学生解决
+    is_solved: bool = False
+
+    # 已生成的题解文本，None 表示尚未生成
+    solution: Optional[str] = None
 
     # TODO: 预留扩展接口 - 后续可从用户画像模块注入学生历史错误画像
     # student_profile: Optional[dict] = None
@@ -93,6 +99,36 @@ class SessionState:
         if node_id in self.thinking_tree:
             self.thinking_tree[node_id].error_history.append(error_type)
 
+    def get_solution_path(self) -> list:
+        """
+        从思维树中提取学生最终解决问题时所使用的路径。
+
+        逻辑：以 last_updated_node_id 为终点，沿 parent_id 向上回溯至 n0，
+        返回这条路径上的节点列表（从根到叶的顺序）。
+
+        Returns:
+            ThinkingNode 列表，从 n0 到解题终点节点，按顺序排列。
+            若 last_updated_node_id 为 None 或节点不存在，返回空列表。
+        """
+        if not self.last_updated_node_id:
+            return []
+
+        path = []
+        current_id = self.last_updated_node_id
+
+        # 沿 parent_id 向上回溯，防止循环引用设置最大步数
+        visited = set()
+        while current_id is not None:
+            if current_id in visited or current_id not in self.thinking_tree:
+                break
+            visited.add(current_id)
+            path.append(self.thinking_tree[current_id])
+            current_id = self.thinking_tree[current_id].parent_id
+
+        # 回溯结果是从叶到根，反转后返回从根到叶的顺序
+        path.reverse()
+        return path
+
     def to_dict(self) -> dict:
         """将 SessionState 序列化为可 JSON 持久化的字典"""
         return {
@@ -113,6 +149,8 @@ class SessionState:
             "current_stuck_node_id": self.current_stuck_node_id,
             "stuck_count": self.stuck_count,
             "last_updated_node_id": self.last_updated_node_id,
+            "is_solved": self.is_solved,
+            "solution": self.solution
         }
 
     @classmethod
@@ -141,4 +179,7 @@ class SessionState:
         object.__setattr__(instance, "current_stuck_node_id", data["current_stuck_node_id"])
         object.__setattr__(instance, "stuck_count", data["stuck_count"])
         object.__setattr__(instance, "last_updated_node_id", data["last_updated_node_id"])
+        object.__setattr__(instance, "is_solved", data.get("is_solved", False))
+        object.__setattr__(instance, "solution", data.get("solution", None))
+
         return instance

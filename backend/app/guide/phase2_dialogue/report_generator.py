@@ -56,7 +56,8 @@ def generate_report(session_state: SessionState) -> dict:
         "knowledge_tags": llm_result["knowledge_tags"],
         "thinking_chain": thinking_chain,
         "error_profile": llm_result["error_profile"],
-        "independence_evaluation": llm_result["independence_evaluation"]
+        "independence_evaluation": llm_result["independence_evaluation"],
+        "solution": session_state.solution  # 题解文本，未生成时为 None
     }
 
     logger.info("讲题报告生成完成，知识点标签：%s", llm_result.get("knowledge_tags", []))

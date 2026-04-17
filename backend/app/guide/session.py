@@ -48,7 +48,8 @@ class SocraticTutorSession:
             student_input: 学生的输入文本
 
         Returns:
-            老师的引导问题文本
+            tuple: (老师的引导问题文本, 题目是否已解决)
+
 
         Raises:
             TutorSessionError: LLM 调用或图执行失败时抛出
@@ -75,7 +76,7 @@ class SocraticTutorSession:
 
             logger.info("本轮对话完成，老师问题：%s", final_question[:50])
 
-            return final_question
+            return final_question, self._state.is_solved
         except Exception as e:
             raise TutorSessionError(f"对话执行失败：{e}") from e
 
@@ -138,6 +139,8 @@ class SocraticTutorSession:
                     # 推送兜底文字（逐字符 yield，保持流式体验）
                     for ch in full_text:
                         yield ch
+                    if self._state.is_solved:
+                        yield "__SOLVED__"
                     break
 
                 # Guardrail 检查
@@ -149,6 +152,8 @@ class SocraticTutorSession:
                     final_question = full_text
                     for token in tokens:
                         yield token
+                    if self._state.is_solved:
+                        yield "__SOLVED__"
                     break
                 else:
                     # 打回：通知前端清空，准备重试
@@ -184,6 +189,65 @@ class SocraticTutorSession:
             return generate_report(self._state)
         except Exception as e:
             raise TutorSessionError(f"报告生成失败：{e}") from e
+
+    def generate_solution(self) -> str:
+        """
+        生成本次讲题的个性化题解（带缓存）。
+
+        若题解已生成，直接返回缓存内容，不再调用 LLM。
+        生成完成后立即持久化到 SessionState。
+
+        Returns:
+            题解 Markdown 文本
+
+        Raises:
+            TutorSessionError: 题解生成失败时抛出
+        """
+        # 缓存命中，直接返回
+        if self._state.solution is not None:
+            logger.info("题解已存在，返回缓存内容")
+            return self._state.solution
+
+        try:
+            from .phase2_dialogue.solution_generator import generate_solution as _generate
+            logger.info("开始生成题解")
+            solution_text = _generate(self._state)
+            # 持久化到 SessionState
+            self._state.solution = solution_text
+            return solution_text
+        except Exception as e:
+            raise TutorSessionError(f"题解生成失败：{e}") from e
+
+    def stream_solution(self):
+        """
+        生成本次讲题的个性化题解（流式版本，带缓存）。
+
+        若题解已生成，直接一次性 yield 缓存内容。
+        生成完成后将完整文本持久化到 SessionState。
+
+        Yields:
+            str: 题解文本的 Token 片段
+
+        Raises:
+            TutorSessionError: 题解生成失败时抛出
+        """
+        # 缓存命中，一次性返回
+        if self._state.solution is not None:
+            logger.info("题解已存在，从缓存返回")
+            yield self._state.solution
+            return
+
+        try:
+            from .phase2_dialogue.solution_generator import stream_solution_generator
+            logger.info("开始生成题解（流式）")
+            chunks = []
+            for chunk in stream_solution_generator(self._state):
+                chunks.append(chunk)
+                yield chunk
+            # 所有 Token 生成完毕，持久化完整内容
+            self._state.solution = "".join(chunks)
+        except Exception as e:
+            raise TutorSessionError(f"题解生成失败（流式）：{e}") from e
 
     @property
     def is_finished(self) -> bool:

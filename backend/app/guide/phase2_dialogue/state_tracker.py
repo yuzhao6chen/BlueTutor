@@ -162,6 +162,10 @@ def run_state_tracker(graph_state: "DialogueGraphState") -> "DialogueGraphState"
             state.update_node_status(node_id, NodeStatus.ABANDONED)
             state.last_updated_node_id = node_id
 
+        elif action == "mark_solved":
+            state.is_solved = True
+            logger.info("State Tracker：题目已解决，标记 is_solved = True")
+
     # 将学生输入记录到对话历史
     state.dialogue_history.append({"role": "student", "content": student_input})
 

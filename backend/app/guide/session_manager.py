@@ -92,12 +92,12 @@ def run_turn(session_id: str, student_input: str) -> str:
         TutorSessionError: 对话执行失败时抛出
     """
     session = get_session(session_id)
-    question = session.run_one_turn(student_input)
+    question, is_solved = session.run_one_turn(student_input)
 
     # 每轮结束后持久化
     save_session(session_id, session._state)
 
-    return question
+    return question, is_solved
 
 
 def run_turn_stream(session_id: str, student_input: str):
@@ -142,6 +142,44 @@ def generate_report(session_id: str) -> dict:
     """
     session = get_session(session_id)
     return session.generate_report()
+
+
+def generate_solution(session_id: str) -> str:
+    """
+    生成个性化题解（带缓存）。
+
+    Args:
+        session_id: 会话唯一标识
+
+    Returns:
+        题解 Markdown 文本
+
+    Raises:
+        KeyError: 会话不存在时抛出
+        TutorSessionError: 题解生成失败时抛出
+    """
+    session = get_session(session_id)
+    solution_text = session.generate_solution()
+    # 生成完成后持久化（solution 已写入 session._state）
+    save_session(session_id, session._state)
+    return solution_text
+
+
+def stream_solution(session_id: str):
+    """
+    生成个性化题解（流式版本，带缓存）。
+
+    Yields:
+        str: 题解文本的 Token 片段
+
+    Raises:
+        KeyError: 会话不存在时抛出
+        TutorSessionError: 题解生成失败时抛出
+    """
+    session = get_session(session_id)
+    yield from session.stream_solution()
+    # 流式生成完毕后持久化（solution 已在 stream_solution 内写入 session._state）
+    save_session(session_id, session._state)
 
 
 def get_session_detail(session_id: str) -> dict:

@@ -35,6 +35,7 @@ class RunTurnRequest(BaseModel):
 
 class RunTurnData(BaseModel):
     question: str = Field(description="老师的引导问题文本")
+    is_solved: bool = Field(default=False, description="题目是否已被学生解决")
 
 
 class RunTurnResponse(ApiResponse[RunTurnData]):
