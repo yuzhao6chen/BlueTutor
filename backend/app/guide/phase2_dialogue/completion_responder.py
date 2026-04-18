@@ -38,6 +38,8 @@ def run_completion_responder(graph_state: "DialogueGraphState") -> "DialogueGrap
     response = response.strip()
     logger.info("Completion Responder 生成收尾回复：%s", response[:50])
 
+    state.dialogue_history.append({"role": "tutor", "content": response})
+
     return {
         "session_state": state,
         "student_input": graph_state["student_input"],

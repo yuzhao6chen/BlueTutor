@@ -50,6 +50,9 @@ class SessionState:
     # 已生成的题解文本，None 表示尚未生成
     solution: Optional[str] = None
 
+    # 已生成的可视化数据，None 表示尚未生成
+    visualization: Optional[dict] = None
+
     # TODO: 预留扩展接口 - 后续可从用户画像模块注入学生历史错误画像
     # student_profile: Optional[dict] = None
 
@@ -150,7 +153,8 @@ class SessionState:
             "stuck_count": self.stuck_count,
             "last_updated_node_id": self.last_updated_node_id,
             "is_solved": self.is_solved,
-            "solution": self.solution
+            "solution": self.solution,
+            "visualization": self.visualization
         }
 
     @classmethod
@@ -181,5 +185,6 @@ class SessionState:
         object.__setattr__(instance, "last_updated_node_id", data["last_updated_node_id"])
         object.__setattr__(instance, "is_solved", data.get("is_solved", False))
         object.__setattr__(instance, "solution", data.get("solution", None))
+        object.__setattr__(instance, "visualization", data.get("visualization", None))
 
         return instance

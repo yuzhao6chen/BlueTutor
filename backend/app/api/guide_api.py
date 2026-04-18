@@ -21,9 +21,11 @@ from ..guide.session_manager import (
     create_session,
     generate_report,
     generate_solution,
+    generate_visualization,
     get_session,
     get_session_detail,
     get_thinking_tree,
+    get_visualization,
     run_turn,
     run_turn_stream,
     stream_solution,
@@ -214,6 +216,47 @@ def post_stream_solution(session_id: str) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         }
     )
+
+
+@guide_router.get("/sessions/{session_id}/visualization")
+def get_visualization_data(session_id: str) -> Any:
+    """获取已生成的可视化数据（未生成时返回 404）"""
+    try:
+        session = get_session(session_id)
+        if session._state.visualization is None:
+            return JSONResponse(
+                status_code=404,
+                content={"code": 4048, "message": "可视化尚未生成", "data": None}
+            )
+        return {
+            "code": 200,
+            "message": "success",
+            "data": session._state.visualization
+        }
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={"code": 4047, "message": f"会话不存在：{session_id}", "data": None}
+        )
+
+
+@guide_router.post("/sessions/{session_id}/visualization")
+def post_generate_visualization(session_id: str) -> Any:
+    """触发生成题解可视化数据（带缓存，已生成则直接返回）"""
+    try:
+        visualization_data = generate_visualization(session_id)
+        return {"code": 200, "message": "success", "data": visualization_data}
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={"code": 4047, "message": f"会话不存在：{session_id}", "data": None}
+        )
+    except TutorSessionError as e:
+        logger.error("可视化生成失败 [%s]：%s", session_id, e)
+        return JSONResponse(
+            status_code=500,
+            content={"code": 5004, "message": str(e), "data": None}
+        )
 
 
 __all__ = ["guide_router"]

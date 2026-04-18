@@ -167,6 +167,12 @@ STATE_TRACKER_PROMPT = ChatPromptTemplate.from_messages([
         - mark_solved 必须与本轮最后一条 add_node（status 为 correct）或 mark_correct 出现在同一指令列表中，不得单独出现。
         - 若学生只是推导出了某个中间步骤（如"x=20"），但尚未明确说出最终结论，不得输出 mark_solved。
         - mark_solved 放在指令列表的最后一条。
+    12. 【关于数学正确性判断的特别规定】
+        在将任何节点标记为 incorrect 之前，必须先对学生的表达式进行严格的数学验证：
+        - 对于代数表达式（如 "40-4x"），必须展开验证其是否等价于题目中的量（如 4×(10-x) = 40-4x ✅）
+        - 对于合并步骤（如 "2x + (40-4x) = 40-2x"），必须逐步展开验证合并结果是否正确
+        - 禁止仅凭"表达式形式看起来不寻常"就判定为错误，必须有明确的数学推导依据
+        - 若无法确定表达式是否正确，应判定为 correct，而非 incorrect
 
     """),
     ("human", """【题目信息】
@@ -460,7 +466,6 @@ COMPLETION_RESPONDER_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 # ── Solution Generator ─────────────────────────────────────
-# ── Solution Generator ─────────────────────────────────────
 SOLUTION_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """你是一位专业的数学教师，负责在学生完成题目后，为其生成一份完整的个性化题解。
 
@@ -479,6 +484,10 @@ SOLUTION_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
 - 必须严格基于【学生的解题路径】来还原解题步骤，禁止引入解题路径之外的其他方法
 - 按步骤展开，每一步说明"为什么这样做"，而不只是"做了什么"
 - 语言清晰、严谨，风格类似教辅书上的解析，适合小学生阅读
+- 在解题过程的开头（第一步文字之前）插入占位标记 [VISUAL:step_overview]
+- 在解题过程的核心推导步骤之前插入占位标记 [VISUAL:step_1]
+- 若解题过程包含明显的第二个关键步骤（如从列方程到求解），在该步骤之前插入 [VISUAL:step_2]
+- 占位标记单独占一行，前后各空一行，格式严格为 [VISUAL:step_id]，不得有其他字符
 
 **## 学习回顾**
 - 结合完整思维树和对话历史，指出学生本次解题的亮点（哪些步骤想得好、哪里有独到之处）
@@ -497,6 +506,8 @@ SOLUTION_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
 - 禁止在解题过程中引入学生解题路径之外的方法
 - 禁止输出 JSON 或任何代码格式
 - 禁止在三个段落之外输出额外内容（如前言、总结语等）
+- 若【学生的解题路径】为空，则【解题过程】部分根据题目信息和对话历史，推断学生最可能使用的方法进行讲解，并在段落开头注明"（根据对话记录推断）"
+- 禁止在【学习回顾】和【知识小结】段落中插入任何 [VISUAL:xxx] 占位标记，占位标记只允许出现在【解题过程】段落中
 
 直接输出 Markdown 格式的题解，不要输出任何前缀或说明。
 """),
@@ -513,4 +524,3 @@ SOLUTION_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
 {dialogue_history}
 """)
 ])
-

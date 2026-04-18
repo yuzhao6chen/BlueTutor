@@ -249,6 +249,34 @@ class SocraticTutorSession:
         except Exception as e:
             raise TutorSessionError(f"题解生成失败（流式）：{e}") from e
 
+    def generate_visualization(self) -> dict:
+        """
+        生成本次讲题的可视化数据（带缓存）。
+
+        若可视化已生成，直接返回缓存内容，不再调用 LLM。
+        生成完成后立即持久化到 SessionState。
+
+        Returns:
+            可视化数据字典，包含 problem_type 和 visuals 列表
+
+        Raises:
+            TutorSessionError: 可视化生成失败时抛出
+        """
+        # 缓存命中，直接返回
+        if self._state.visualization is not None:
+            logger.info("可视化已存在，返回缓存内容")
+            return self._state.visualization
+
+        try:
+            from .phase3_solution.visualization import generate_visualization as _generate
+            logger.info("开始生成可视化")
+            visualization_data = _generate(self._state)
+            # 持久化到 SessionState
+            self._state.visualization = visualization_data
+            return visualization_data
+        except Exception as e:
+            raise TutorSessionError(f"可视化生成失败：{e}") from e
+
     @property
     def is_finished(self) -> bool:
         """判断对话是否已结束（预留接口，当前始终返回 False）"""

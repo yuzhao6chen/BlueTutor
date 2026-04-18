@@ -218,3 +218,41 @@ def get_thinking_tree(session_id: str) -> dict:
         }
         for node_id, node in state.thinking_tree.items()
     }
+
+
+def generate_visualization(session_id: str) -> dict:
+    """
+    生成题解可视化数据（带缓存）。
+
+    Args:
+        session_id: 会话唯一标识
+
+    Returns:
+        可视化数据字典，包含 problem_type 和 visuals 列表
+
+    Raises:
+        KeyError: 会话不存在时抛出
+        TutorSessionError: 可视化生成失败时抛出
+    """
+    session = get_session(session_id)
+    visualization_data = session.generate_visualization()
+    # 生成完成后持久化（visualization 已写入 session._state）
+    save_session(session_id, session._state)
+    return visualization_data
+
+
+def get_visualization(session_id: str) -> dict | None:
+    """
+    获取已生成的可视化数据（不触发生成）。
+
+    Args:
+        session_id: 会话唯一标识
+
+    Returns:
+        可视化数据字典，若尚未生成则返回 None
+
+    Raises:
+        KeyError: 会话不存在时抛出
+    """
+    session = get_session(session_id)
+    return session._state.visualization
