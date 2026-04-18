@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from .api.preview_api import preview_router
 from .api.guide_api import guide_router
+from .api.preview_api import preview_router
 from .api.shared_api import shared_router
 
 
@@ -16,6 +17,14 @@ app = FastAPI(
 app.include_router(preview_router)
 app.include_router(guide_router)
 app.include_router(shared_router)
+
+app.add_middleware(
+	CORSMiddleware,
+	allow_origins=["*"],  # Allow all origins during development.
+	allow_credentials=True,
+	allow_methods=["*"],
+	allow_headers=["*"],
+)
 
 
 @app.get("/")
