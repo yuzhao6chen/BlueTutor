@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from .api.preview_api import preview_router
 from .api.guide_api import guide_router
+from .api.shared_api import shared_router
 
 
 app = FastAPI(
@@ -14,6 +15,7 @@ app = FastAPI(
 
 app.include_router(preview_router)
 app.include_router(guide_router)
+app.include_router(shared_router)
 
 
 @app.get("/")
