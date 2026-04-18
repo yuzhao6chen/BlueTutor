@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from .openai_compat import build_chat_completions_url, get_first_env
 
@@ -15,6 +15,7 @@ from .openai_compat import build_chat_completions_url, get_first_env
 DEFAULT_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 DEFAULT_BASE_URL = "https://apiport.cc/v1"
 DEFAULT_MODEL_NAME = "gpt-4o"
+_DIRECT_HTTP_OPENER = build_opener(ProxyHandler({}))
 
 OCR_PROMPT = (
     "你是 BlueTutor 的题目识别助手，服务对象是小学三年级到初中阶段的数学学习场景。\n"
@@ -128,7 +129,7 @@ class OCRAgent:
         )
 
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            with _DIRECT_HTTP_OPENER.open(request, timeout=self.timeout_seconds) as response:
                 body = response.read().decode("utf-8")
         except HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="ignore")
