@@ -69,9 +69,11 @@ class SocraticTutorSession:
             result = self._graph.invoke(graph_state)
 
             final_question = result["generated_question"]
-            result["session_state"].dialogue_history.append(
-                {"role": "tutor", "content": final_question}
-            )
+            if not result["session_state"].is_solved:
+                result["session_state"].dialogue_history.append(
+                    {"role": "tutor", "content": final_question}
+                )
+
             self._state = result["session_state"]
 
             logger.info("本轮对话完成，老师问题：%s", final_question[:50])
@@ -163,9 +165,11 @@ class SocraticTutorSession:
                     logger.info("Guardrail 打回（第 %d 次），准备重试", retry_count)
 
             # ── 更新会话状态 ──────────────────────────────────────────
-            guardrail_result["session_state"].dialogue_history.append(
-                {"role": "tutor", "content": final_question}
-            )
+            # completion_responder 已在内部写入 dialogue_history，避免重复追加
+            if not self._state.is_solved:
+                guardrail_result["session_state"].dialogue_history.append(
+                    {"role": "tutor", "content": final_question}
+                )
             self._state = guardrail_result["session_state"]
 
             logger.info("本轮对话完成（流式），老师问题：%s", final_question[:50])
