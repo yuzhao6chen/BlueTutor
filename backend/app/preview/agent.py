@@ -6,15 +6,17 @@ import re
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from .prompt import build_knowledge_extraction_prompt, build_preview_chat_prompt
 from .schema import PreviewChatMessage
+from ..shared.openai_compat import build_chat_completions_url, get_first_env
 
 
 DEFAULT_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
-DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+DEFAULT_BASE_URL = "https://apiport.cc/v1"
 DEFAULT_MODEL_NAME = "qwen3.6-plus"
+_DIRECT_HTTP_OPENER = build_opener(ProxyHandler({}))
 
 
 class PreviewAgent:
@@ -31,9 +33,10 @@ class PreviewAgent:
 		self.env_path = env_path or DEFAULT_ENV_PATH
 		_load_env_file(self.env_path)
 
-		self.base_url = base_url or os.getenv("LLM_BASE_URL", DEFAULT_BASE_URL)
-		self.api_key = api_key or os.getenv("LLM_API_KEY")
-		self.model_name = model_name or os.getenv("LLM_MODEL_NAME", DEFAULT_MODEL_NAME)
+		configured_base_url = base_url or get_first_env("OPENAI_BASE_URL", "LLM_BASE_URL") or DEFAULT_BASE_URL
+		self.base_url = build_chat_completions_url(configured_base_url)
+		self.api_key = api_key or get_first_env("OPENAI_API_KEY", "LLM_API_KEY")
+		self.model_name = model_name or get_first_env("OPENAI_MODEL", "LLM_MODEL_NAME") or DEFAULT_MODEL_NAME
 		self.timeout_seconds = timeout_seconds or int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
 		self.max_retries = max_retries or int(os.getenv("LLM_MAX_RETRIES", "2"))
 
@@ -99,7 +102,7 @@ class PreviewAgent:
 		)
 
 		try:
-			with urlopen(request, timeout=self.timeout_seconds) as response:
+			with _DIRECT_HTTP_OPENER.open(request, timeout=self.timeout_seconds) as response:
 				body = response.read().decode("utf-8")
 		except HTTPError as exc:
 			error_body = exc.read().decode("utf-8", errors="ignore")
