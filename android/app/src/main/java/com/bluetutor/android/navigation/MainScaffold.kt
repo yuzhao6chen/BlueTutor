@@ -30,12 +30,19 @@ fun MainScaffold() {
     val currentRoute = navBackStackEntry?.destination?.route
     val colorScheme = MaterialTheme.colorScheme
     var previewBottomBarVisible by remember { mutableStateOf(true) }
+    var profileBottomBarVisible by remember { mutableStateOf(true) }
+
+    val shouldShowBottomBar = when (currentRoute) {
+        BluetutorDestination.Preview.route -> previewBottomBarVisible
+        BluetutorDestination.Profile.route -> profileBottomBarVisible
+        else -> true
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = colorScheme.background,
         bottomBar = {
-            if (currentRoute != BluetutorDestination.Preview.route || previewBottomBarVisible) {
+            if (shouldShowBottomBar) {
                 NavigationBar(
                     modifier = Modifier.height(60.dp),
                     containerColor = colorScheme.surface,
@@ -87,6 +94,7 @@ fun MainScaffold() {
             navController = navController,
             modifier = Modifier.padding(innerPadding),
             onPreviewBottomBarVisibilityChange = { previewBottomBarVisible = it },
+            onProfileBottomBarVisibilityChange = { profileBottomBarVisible = it },
         )
     }
 }
