@@ -380,7 +380,7 @@ object PreviewApiClient {
         val preferred = if (isProbablyEmulator()) {
             listOf(emulatorBaseUrl, lanBaseUrl)
         } else {
-            listOf(lanBaseUrl, emulatorBaseUrl)
+            listOf(lanBaseUrl)
         }
         val cached = cachedBaseUrl
         return buildList {
