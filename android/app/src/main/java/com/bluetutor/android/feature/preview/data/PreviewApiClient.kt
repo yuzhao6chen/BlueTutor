@@ -3,10 +3,14 @@ package com.bluetutor.android.feature.preview.data
 import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -33,6 +37,15 @@ data class PreviewApiChatMessage(
     val role: String,
     val content: String,
 )
+
+sealed interface PreviewApiChatStreamEvent {
+    data class Token(val token: String) : PreviewApiChatStreamEvent
+
+    data class Done(
+        val reply: String,
+        val followUpQuestions: List<String>,
+    ) : PreviewApiChatStreamEvent
+}
 
 class PreviewApiException(message: String) : IOException(message)
 
@@ -93,47 +106,69 @@ object PreviewApiClient {
         question: String,
         history: List<PreviewApiChatMessage> = emptyList(),
     ): PreviewApiChatResult = withContext(Dispatchers.IO) {
-        val knowledgePointsJson = JSONArray()
-        selectedKnowledgePoints.forEach { knowledgePointsJson.put(it) }
-        val historyJson = JSONArray()
-        history.forEach { message ->
-            val content = message.content.trim()
-            if (content.isNotEmpty()) {
-                historyJson.put(
-                    JSONObject()
-                        .put("role", message.role)
-                        .put("content", content),
-                )
-            }
-        }
-
-        val payload = JSONObject()
-            .put("user_id", demoUserId)
-            .put("text", question)
-            .put("context_text", contextText)
-            .put("topic_id", topicId.toString())
-            .put("topic_title", topicTitle)
-            .put("selected_knowledge_points", knowledgePointsJson)
-            .put("history", historyJson)
+        val payload = buildChatPayload(
+            topicId = topicId,
+            topicTitle = topicTitle,
+            contextText = contextText,
+            selectedKnowledgePoints = selectedKnowledgePoints,
+            question = question,
+            history = history,
+        )
 
         val root = postJson("/api/preview/chat", payload)
         val data = root.optJSONObject("data")
             ?: throw PreviewApiException("预习对话接口返回缺少 data 字段")
-        val followUpQuestionsJson = data.optJSONArray("follow_up_questions") ?: JSONArray()
-        val followUpQuestions = buildList {
-            for (index in 0 until followUpQuestionsJson.length()) {
-                val item = followUpQuestionsJson.optString(index).trim()
-                if (item.isNotEmpty()) {
-                    add(item)
-                }
-            }
-        }
 
         PreviewApiChatResult(
             reply = data.optString("reply"),
-            followUpQuestions = followUpQuestions,
+            followUpQuestions = parseFollowUpQuestions(data),
         )
     }
+
+    fun streamQuickTopicQuestion(
+        topicId: Int,
+        topicTitle: String,
+        contextText: String,
+        selectedKnowledgePoints: List<String>,
+        question: String,
+        history: List<PreviewApiChatMessage> = emptyList(),
+    ): Flow<PreviewApiChatStreamEvent> = flow {
+        val payload = buildChatPayload(
+            topicId = topicId,
+            topicTitle = topicTitle,
+            contextText = contextText,
+            selectedKnowledgePoints = selectedKnowledgePoints,
+            question = question,
+            history = history,
+        )
+
+        streamSse("/api/preview/chat/stream", payload) { eventName, data ->
+            when (eventName) {
+                "token" -> {
+                    val token = data.optString("token")
+                    if (token.isNotEmpty()) {
+                        emit(PreviewApiChatStreamEvent.Token(token))
+                    }
+                }
+
+                "done" -> {
+                    emit(
+                        PreviewApiChatStreamEvent.Done(
+                            reply = data.optString("reply"),
+                            followUpQuestions = parseFollowUpQuestions(data),
+                        ),
+                    )
+                }
+
+                "error" -> {
+                    val message = data.optString("message").ifBlank {
+                        "预习流式对话失败"
+                    }
+                    throw PreviewApiException(message)
+                }
+            }
+        }
+    }.flowOn(Dispatchers.IO)
 
     private fun postJson(path: String, payload: JSONObject): JSONObject {
         var lastNetworkError: IOException? = null
@@ -183,6 +218,162 @@ object PreviewApiClient {
                 }
             },
         )
+    }
+
+    private suspend fun streamSse(
+        path: String,
+        payload: JSONObject,
+        onEvent: suspend (String, JSONObject) -> Unit,
+    ) {
+        var lastNetworkError: IOException? = null
+
+        for (baseUrl in candidateBaseUrls()) {
+            val request = Request.Builder()
+                .url(baseUrl + path)
+                .header("Accept", "text/event-stream")
+                .post(payload.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            try {
+                client.newCall(request).execute().use { response ->
+                    val body = response.body ?: throw PreviewApiException("预习服务返回空响应")
+                    if (!response.isSuccessful) {
+                        throw PreviewApiException(parseHttpErrorMessage(response.code, body))
+                    }
+
+                    cachedBaseUrl = baseUrl
+                    parseSseStream(body, onEvent)
+                    return
+                }
+            } catch (error: PreviewApiException) {
+                throw error
+            } catch (error: IOException) {
+                lastNetworkError = error
+            }
+        }
+
+        val attempted = candidateBaseUrls().joinToString(separator = "、")
+        val detail = lastNetworkError?.message?.takeIf { it.isNotBlank() }
+        throw PreviewApiException(
+            buildString {
+                append("暂时无法连接专题预习服务。已尝试地址：")
+                append(attempted)
+                append("。请确认后端已在 0.0.0.0:8000 启动。")
+                if (detail != null) {
+                    append("\n")
+                    append(detail)
+                }
+            },
+        )
+    }
+
+    private suspend fun parseSseStream(
+        body: ResponseBody,
+        onEvent: suspend (String, JSONObject) -> Unit,
+    ) {
+        body.source().use { source ->
+            var eventName = "message"
+            val dataLines = mutableListOf<String>()
+
+            suspend fun flushEvent() {
+                if (dataLines.isEmpty()) {
+                    eventName = "message"
+                    return
+                }
+
+                val data = dataLines.joinToString(separator = "\n")
+                dataLines.clear()
+                if (data.isBlank()) {
+                    eventName = "message"
+                    return
+                }
+
+                val payload = JSONObject(data)
+                val currentEventName = eventName
+                eventName = "message"
+                onEvent(currentEventName, payload)
+            }
+
+            while (!source.exhausted()) {
+                val rawLine = source.readUtf8Line() ?: break
+                if (rawLine.isBlank()) {
+                    flushEvent()
+                    continue
+                }
+
+                when {
+                    rawLine.startsWith("event:") -> {
+                        eventName = rawLine.substringAfter("event:").trim().ifEmpty { "message" }
+                    }
+
+                    rawLine.startsWith("data:") -> {
+                        dataLines += rawLine.substringAfter("data:").trim()
+                    }
+                }
+            }
+
+            flushEvent()
+        }
+    }
+
+    private fun buildChatPayload(
+        topicId: Int,
+        topicTitle: String,
+        contextText: String,
+        selectedKnowledgePoints: List<String>,
+        question: String,
+        history: List<PreviewApiChatMessage>,
+    ): JSONObject {
+        val knowledgePointsJson = JSONArray()
+        selectedKnowledgePoints.forEach { knowledgePointsJson.put(it) }
+        val historyJson = JSONArray()
+        history.forEach { message ->
+            val content = message.content.trim()
+            if (content.isNotEmpty()) {
+                historyJson.put(
+                    JSONObject()
+                        .put("role", message.role)
+                        .put("content", content),
+                )
+            }
+        }
+
+        return JSONObject()
+            .put("user_id", demoUserId)
+            .put("text", question)
+            .put("context_text", contextText)
+            .put("topic_id", topicId.toString())
+            .put("topic_title", topicTitle)
+            .put("selected_knowledge_points", knowledgePointsJson)
+            .put("history", historyJson)
+    }
+
+    private fun parseFollowUpQuestions(data: JSONObject): List<String> {
+        val followUpQuestionsJson = data.optJSONArray("follow_up_questions") ?: JSONArray()
+        return buildList {
+            for (index in 0 until followUpQuestionsJson.length()) {
+                val item = followUpQuestionsJson.optString(index).trim()
+                if (item.isNotEmpty()) {
+                    add(item)
+                }
+            }
+        }
+    }
+
+    private fun parseHttpErrorMessage(statusCode: Int, body: ResponseBody): String {
+        val rawBody = body.string().trim()
+        if (rawBody.isBlank()) {
+            return "预习服务请求失败（HTTP $statusCode）"
+        }
+
+        return runCatching {
+            val root = JSONObject(rawBody)
+            root.optString("message").ifBlank {
+                "预习服务请求失败（HTTP $statusCode）"
+            }
+        }.getOrElse {
+            rawBody
+        }
     }
 
     private fun candidateBaseUrls(): List<String> {

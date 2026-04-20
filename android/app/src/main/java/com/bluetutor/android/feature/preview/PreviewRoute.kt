@@ -71,13 +71,14 @@ import com.bluetutor.android.feature.preview.component.PreviewQuickEntryCard
 import com.bluetutor.android.feature.preview.component.PreviewQuickTopicCard
 import com.bluetutor.android.feature.preview.component.PreviewRecommendedLessonCard
 import com.bluetutor.android.feature.preview.data.PreviewApiChatMessage
-import com.bluetutor.android.feature.preview.data.PreviewApiChatResult
 import com.bluetutor.android.feature.preview.data.PreviewApiClient
+import com.bluetutor.android.feature.preview.data.PreviewApiChatStreamEvent
 import com.bluetutor.android.feature.preview.data.PreviewApiKnowledgePoint
 import com.bluetutor.android.feature.preview.data.PreviewLocalCache
 import com.bluetutor.android.ui.theme.BluetutorGradients
 import com.bluetutor.android.ui.theme.BluetutorSpacing
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 private enum class PreviewDestination {
@@ -363,10 +364,16 @@ fun PreviewRoute(
             role = PreviewConversationRole.User,
             text = question,
         )
+        val assistantMessageId = buildMessageId("assistant")
+        val assistantPlaceholder = PreviewConversationMessageUiModel(
+            id = assistantMessageId,
+            role = PreviewConversationRole.Assistant,
+            text = "…",
+        )
 
         val sendingState = state
             .withUpdatedChatSession(activeSession.id) { session ->
-                val nextMessages = session.messages + userMessage
+                val nextMessages = session.messages + userMessage + assistantPlaceholder
                 session.copy(
                     title = buildSessionTitle(if (session.messages.isEmpty()) question else session.title),
                     updatedAtMillis = System.currentTimeMillis(),
@@ -383,8 +390,11 @@ fun PreviewRoute(
         persistWorkspace(sendingState)
 
         scope.launch {
+            var receivedToken = false
+            var receivedDone = false
+
             runCatching {
-                PreviewApiClient.sendQuickTopicQuestion(
+                PreviewApiClient.streamQuickTopicQuestion(
                     topicId = state.topic.id,
                     topicTitle = state.topic.label,
                     contextText = buildQuickTopicContext(
@@ -396,34 +406,93 @@ fun PreviewRoute(
                     question = question,
                     history = history,
                 )
-            }.onSuccess { result ->
-                workspace = workspace?.takeIf { it.topic.id == state.topic.id }?.let { current ->
-                    current
-                        .withUpdatedChatSession(activeSession.id) { session ->
-                            session.copy(
-                                updatedAtMillis = System.currentTimeMillis(),
-                                messages = session.messages + result.toAssistantMessage(),
-                            )
+                    .collect { event ->
+                        when (event) {
+                            is PreviewApiChatStreamEvent.Token -> {
+                                receivedToken = true
+                                updateWorkspace { current ->
+                                    if (current.topic.id != state.topic.id) {
+                                        current
+                                    } else {
+                                        current.withUpdatedChatSession(activeSession.id) { session ->
+                                            session.copy(
+                                                updatedAtMillis = System.currentTimeMillis(),
+                                                messages = session.messages.map { message ->
+                                                    if (message.id == assistantMessageId) {
+                                                        val nextText = if (message.text == "…" || message.text.isBlank()) {
+                                                            event.token
+                                                        } else {
+                                                            message.text + event.token
+                                                        }
+                                                        message.copy(text = nextText)
+                                                    } else {
+                                                        message
+                                                    }
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            is PreviewApiChatStreamEvent.Done -> {
+                                receivedDone = true
+                                workspace = workspace?.takeIf { it.topic.id == state.topic.id }?.let { current ->
+                                    current
+                                        .withUpdatedChatSession(activeSession.id) { session ->
+                                            session.copy(
+                                                updatedAtMillis = System.currentTimeMillis(),
+                                                messages = session.messages.map { message ->
+                                                    if (message.id == assistantMessageId) {
+                                                        message.copy(
+                                                            text = event.reply.ifBlank {
+                                                                if (message.text == "…") "" else message.text
+                                                            },
+                                                            followUpQuestions = event.followUpQuestions,
+                                                        )
+                                                    } else {
+                                                        message
+                                                    }
+                                                },
+                                            )
+                                        }
+                                        .copy(
+                                            isSending = false,
+                                            chatErrorMessage = null,
+                                        )
+                                        .also(::persistWorkspace)
+                                }
+                            }
                         }
-                        .copy(
-                            isSending = false,
-                            chatErrorMessage = null,
-                        )
-                        .also(::persistWorkspace)
-                }
+                    }
+                check(receivedDone) { "预习流式对话已中断，请稍后重试" }
             }.onFailure { error ->
                 workspace = workspace?.takeIf { it.topic.id == state.topic.id }?.let { current ->
                     current
                         .withUpdatedChatSession(activeSession.id) { session ->
+                            val nextMessages = if (receivedToken) {
+                                session.messages.mapNotNull { message ->
+                                    if (message.id == assistantMessageId && message.text == "…") {
+                                        null
+                                    } else {
+                                        message
+                                    }
+                                }
+                            } else {
+                                session.messages.filterNot { message ->
+                                    message.id == userMessage.id || message.id == assistantMessageId
+                                }
+                            }
+
                             session.copy(
                                 updatedAtMillis = System.currentTimeMillis(),
-                                messages = session.messages.dropLast(1),
+                                messages = nextMessages,
                             )
                         }
                         .copy(
                             isSending = false,
                             chatErrorMessage = error.toPreviewErrorMessage(),
-                            draftQuestion = question,
+                            draftQuestion = if (receivedToken) "" else question,
                         )
                         .also(::persistWorkspace)
                 }
@@ -801,8 +870,8 @@ private fun PreviewAiChatScreen(
     var menuExpanded by remember { mutableStateOf(false) }
     val messageScrollState = rememberScrollState()
 
-    LaunchedEffect(activeSession?.id, activeSession?.messages?.size) {
-        messageScrollState.animateScrollTo(messageScrollState.maxValue)
+    LaunchedEffect(activeSession?.id, activeSession?.messages?.size, activeSession?.messages?.lastOrNull()?.text) {
+        messageScrollState.scrollTo(messageScrollState.maxValue)
     }
 
     Scaffold(
@@ -1406,15 +1475,6 @@ private fun List<PreviewApiKnowledgePoint>.toUiModels(): List<PreviewKnowledgePo
         title = it.title,
         description = it.description,
         confidence = it.confidence,
-    )
-}
-
-private fun PreviewApiChatResult.toAssistantMessage(): PreviewConversationMessageUiModel {
-    return PreviewConversationMessageUiModel(
-        id = buildMessageId("assistant"),
-        role = PreviewConversationRole.Assistant,
-        text = reply,
-        followUpQuestions = followUpQuestions,
     )
 }
 

@@ -166,7 +166,14 @@ object PreviewLocalCache {
             .put(
                 "messages",
                 JSONArray().apply {
-                    session.messages.takeLast(20).forEach { message ->
+                    session.messages
+                        .filterNot { message ->
+                            message.role == PreviewConversationRole.Assistant &&
+                                message.text == "…" &&
+                                message.followUpQuestions.isEmpty()
+                        }
+                        .takeLast(20)
+                        .forEach { message ->
                         put(
                             JSONObject()
                                 .put("id", message.id)

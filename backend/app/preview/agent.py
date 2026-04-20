@@ -5,7 +5,7 @@ import os
 import re
 import socket
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
@@ -65,6 +65,26 @@ class PreviewAgent:
 		)
 		return self._call_llm_json(prompt)
 
+	def stream_chat(
+		self,
+		text: str,
+		context_text: str,
+		selected_knowledge_points: list[str],
+		topic_title: str | None = None,
+		history: list[PreviewChatMessage] | None = None,
+	) -> Iterator[str]:
+		prompt = build_preview_chat_prompt(
+			text=text,
+			context_text=context_text,
+			selected_knowledge_points=selected_knowledge_points,
+			topic_title=topic_title,
+			history=history,
+		)
+		return self._stream_chat_completion(prompt)
+
+	def parse_json_response(self, raw_content: str) -> dict[str, Any]:
+		return self._parse_json_response(raw_content)
+
 	def _call_llm_json(self, prompt: str) -> dict[str, Any]:
 		last_error: Exception | None = None
 		retry_prompt = prompt
@@ -83,6 +103,39 @@ class PreviewAgent:
 		raise RuntimeError("LLM response was not valid JSON after retries") from last_error
 
 	def _send_chat_completion(self, prompt: str) -> str:
+		request = self._build_request(prompt, stream=False)
+
+		with self._open_request(request) as response:
+			body = response.read().decode("utf-8")
+
+		response_json = json.loads(body)
+		try:
+			return response_json["choices"][0]["message"]["content"]
+		except (KeyError, IndexError, TypeError) as exc:
+			raise RuntimeError(f"Unexpected LLM response structure: {body}") from exc
+
+	def _stream_chat_completion(self, prompt: str) -> Iterator[str]:
+		request = self._build_request(prompt, stream=True)
+		response = self._open_request(request)
+
+		def generate() -> Iterator[str]:
+			with response:
+				for event_data in _iter_sse_event_data(response):
+					if event_data == "[DONE]":
+						break
+
+					try:
+						chunk_json = json.loads(event_data)
+					except json.JSONDecodeError as exc:
+						raise RuntimeError(f"Unexpected LLM stream payload: {event_data}") from exc
+
+					content = _extract_stream_delta_content(chunk_json)
+					if content:
+						yield content
+
+		return generate()
+
+	def _build_request(self, prompt: str, *, stream: bool) -> Request:
 		payload = {
 			"model": self.model_name,
 			"messages": [
@@ -92,21 +145,22 @@ class PreviewAgent:
 				}
 			],
 			"temperature": 0.2,
-			"stream": False,
+			"stream": stream,
 		}
-		request = Request(
+		return Request(
 			url=self.base_url,
 			data=json.dumps(payload).encode("utf-8"),
 			headers={
 				"Authorization": f"Bearer {self.api_key}",
 				"Content-Type": "application/json",
+				"Accept": "text/event-stream" if stream else "application/json",
 			},
 			method="POST",
 		)
 
+	def _open_request(self, request: Request):
 		try:
-			with _DIRECT_HTTP_OPENER.open(request, timeout=self.timeout_seconds) as response:
-				body = response.read().decode("utf-8")
+			return _DIRECT_HTTP_OPENER.open(request, timeout=self.timeout_seconds)
 		except HTTPError as exc:
 			error_body = exc.read().decode("utf-8", errors="ignore")
 			raise RuntimeError(f"LLM HTTP error {exc.code}: {error_body}") from exc
@@ -114,12 +168,6 @@ class PreviewAgent:
 			raise RuntimeError(f"LLM request timed out after {self.timeout_seconds}s") from exc
 		except URLError as exc:
 			raise RuntimeError(f"LLM connection failed: {exc.reason}") from exc
-
-		response_json = json.loads(body)
-		try:
-			return response_json["choices"][0]["message"]["content"]
-		except (KeyError, IndexError, TypeError) as exc:
-			raise RuntimeError(f"Unexpected LLM response structure: {body}") from exc
 
 	def _parse_json_response(self, raw_content: str) -> dict[str, Any]:
 		cleaned_content = self._clean_response_text(raw_content)
@@ -165,6 +213,53 @@ def _extract_json_object(content: str) -> str | None:
 	if match:
 		return match.group(0)
 	return None
+
+
+def _iter_sse_event_data(response) -> Iterator[str]:
+	data_lines: list[str] = []
+
+	for raw_line in response:
+		line = raw_line.decode("utf-8", errors="ignore").rstrip("\r\n")
+		if not line.strip():
+			if data_lines:
+				yield "\n".join(data_lines)
+				data_lines.clear()
+			continue
+
+		if line.startswith("data:"):
+			data = line[5:]
+			if data.startswith(" "):
+				data = data[1:]
+			data_lines.append(data)
+
+	if data_lines:
+		yield "\n".join(data_lines)
+
+
+def _extract_stream_delta_content(chunk_json: dict[str, Any]) -> str:
+	try:
+		delta = chunk_json["choices"][0]["delta"]
+	except (KeyError, IndexError, TypeError):
+		return ""
+
+	if not isinstance(delta, dict):
+		return ""
+
+	content = delta.get("content")
+	if isinstance(content, str):
+		return content
+
+	if isinstance(content, list):
+		parts: list[str] = []
+		for item in content:
+			if not isinstance(item, dict):
+				continue
+			text_value = item.get("text")
+			if isinstance(text_value, str):
+				parts.append(text_value)
+		return "".join(parts)
+
+	return ""
 
 
 __all__ = ["PreviewAgent"]
