@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ from .schema import (
 
 
 DEFAULT_LOG_DIR = Path(__file__).resolve().parents[2] / "data" / "preview_logs"
+DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "preview_cache"
 
 
 class PreviewService:
@@ -23,22 +25,36 @@ class PreviewService:
 		self,
 		agent: PreviewAgent | None = None,
 		log_dir: Path | None = None,
+		cache_dir: Path | None = None,
 	) -> None:
 		self.agent = agent or PreviewAgent()
 		self.log_dir = log_dir or DEFAULT_LOG_DIR
+		self.cache_dir = cache_dir or DEFAULT_CACHE_DIR
 
 	def get_knowledge_points(self, request: PreviewKnowledgeRequest) -> PreviewKnowledgeData:
 		content_text = self._validate_text(request.content_text, field_name="content_text")
-		raw_result = self.agent.extract_knowledge_points(content_text)
-		data = self._build_knowledge_data(raw_result)
+		cache_key = self._build_knowledge_cache_key(request=request, content_text=content_text)
+		data = self._load_cached_knowledge_data(cache_key)
+		cache_hit = data is not None
+
+		if data is None:
+			raw_result = self.agent.extract_knowledge_points(
+				content_text,
+				topic_title=request.topic_title,
+			)
+			data = self._build_knowledge_data(raw_result)
+			self._save_cached_knowledge_data(cache_key, data)
 
 		self._log_preview_interaction(
 			file_name="knowledge_points.jsonl",
 			payload={
+				"cache_hit": cache_hit,
 				"user_id": request.user_id,
 				"session_id": request.session_id,
 				"page_hint": request.page_hint,
 				"source_type": request.source_type,
+				"topic_id": request.topic_id,
+				"topic_title": request.topic_title,
 				"content_text": content_text,
 				"summary": data.summary,
 				"knowledge_points": [item.model_dump() for item in data.knowledge_points],
@@ -55,6 +71,7 @@ class PreviewService:
 			text=text,
 			context_text=context_text,
 			selected_knowledge_points=selected_knowledge_points,
+			topic_title=request.topic_title,
 			history=request.history,
 		)
 		data = self._build_chat_data(raw_result)
@@ -64,6 +81,8 @@ class PreviewService:
 			payload={
 				"user_id": request.user_id,
 				"session_id": request.session_id,
+				"topic_id": request.topic_id,
+				"topic_title": request.topic_title,
 				"context_text": context_text,
 				"selected_knowledge_points": selected_knowledge_points,
 				"question": text,
@@ -122,6 +141,36 @@ class PreviewService:
 
 	def _build_knowledge_point_id(self, index: int) -> str:
 		return f"kp_{index:03d}"
+
+	def _build_knowledge_cache_key(self, *, request: PreviewKnowledgeRequest, content_text: str) -> str:
+		cache_payload = {
+			"model_name": getattr(self.agent, "model_name", ""),
+			"source_type": request.source_type,
+			"topic_id": request.topic_id,
+			"topic_title": request.topic_title,
+			"content_text": content_text,
+		}
+		serialized_payload = json.dumps(cache_payload, ensure_ascii=False, sort_keys=True)
+		return hashlib.sha256(serialized_payload.encode("utf-8")).hexdigest()
+
+	def _load_cached_knowledge_data(self, cache_key: str) -> PreviewKnowledgeData | None:
+		cache_path = self.cache_dir / f"{cache_key}.json"
+		if not cache_path.exists():
+			return None
+
+		try:
+			payload = json.loads(cache_path.read_text(encoding="utf-8"))
+			return PreviewKnowledgeData.model_validate(payload)
+		except Exception:
+			return None
+
+	def _save_cached_knowledge_data(self, cache_key: str, data: PreviewKnowledgeData) -> None:
+		self.cache_dir.mkdir(parents=True, exist_ok=True)
+		cache_path = self.cache_dir / f"{cache_key}.json"
+		try:
+			cache_path.write_text(data.model_dump_json(indent=2), encoding="utf-8")
+		except OSError:
+			return
 
 	def _log_preview_interaction(self, file_name: str, payload: dict[str, Any]) -> None:
 		self.log_dir.mkdir(parents=True, exist_ok=True)

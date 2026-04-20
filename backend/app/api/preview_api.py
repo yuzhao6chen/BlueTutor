@@ -48,6 +48,12 @@ def analyze_knowledge_points(request: PreviewKnowledgeRequest) -> PreviewKnowled
 			code=5001,
 			message=str(exc),
 		)
+	except Exception as exc:
+		return _error_response(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			code=5000,
+			message=f"Internal error: {exc}",
+		)
 
 
 @preview_router.post("/chat", response_model=PreviewChatResponse)
@@ -66,6 +72,12 @@ def preview_chat(request: PreviewChatRequest) -> PreviewChatResponse | JSONRespo
 			status_code=status.HTTP_502_BAD_GATEWAY,
 			code=5002,
 			message=str(exc),
+		)
+	except Exception as exc:
+		return _error_response(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			code=5000,
+			message=f"Internal error: {exc}",
 		)
 
 

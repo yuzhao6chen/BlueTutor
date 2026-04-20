@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -15,7 +16,7 @@ from ..shared.openai_compat import build_chat_completions_url, get_first_env
 
 DEFAULT_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 DEFAULT_BASE_URL = "https://apiport.cc/v1"
-DEFAULT_MODEL_NAME = "qwen3.6-plus"
+DEFAULT_MODEL_NAME = "qwen3.6-flash"
 _DIRECT_HTTP_OPENER = build_opener(ProxyHandler({}))
 
 
@@ -43,8 +44,8 @@ class PreviewAgent:
 		if not self.api_key:
 			raise ValueError("LLM_API_KEY is not configured")
 
-	def extract_knowledge_points(self, content_text: str) -> dict[str, Any]:
-		prompt = build_knowledge_extraction_prompt(content_text)
+	def extract_knowledge_points(self, content_text: str, topic_title: str | None = None) -> dict[str, Any]:
+		prompt = build_knowledge_extraction_prompt(content_text, topic_title=topic_title)
 		return self._call_llm_json(prompt)
 
 	def chat(
@@ -52,12 +53,14 @@ class PreviewAgent:
 		text: str,
 		context_text: str,
 		selected_knowledge_points: list[str],
+		topic_title: str | None = None,
 		history: list[PreviewChatMessage] | None = None,
 	) -> dict[str, Any]:
 		prompt = build_preview_chat_prompt(
 			text=text,
 			context_text=context_text,
 			selected_knowledge_points=selected_knowledge_points,
+			topic_title=topic_title,
 			history=history,
 		)
 		return self._call_llm_json(prompt)
@@ -107,6 +110,8 @@ class PreviewAgent:
 		except HTTPError as exc:
 			error_body = exc.read().decode("utf-8", errors="ignore")
 			raise RuntimeError(f"LLM HTTP error {exc.code}: {error_body}") from exc
+		except (TimeoutError, socket.timeout) as exc:
+			raise RuntimeError(f"LLM request timed out after {self.timeout_seconds}s") from exc
 		except URLError as exc:
 			raise RuntimeError(f"LLM connection failed: {exc.reason}") from exc
 
