@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>题解可视化测试页</title>
+
+  <!-- marked.js：Markdown 渲染 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    /* ── 全局 ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    /* ── 顶栏 ─────────────────────────────────────────── */
+    header {
+      background: #1a73e8;
+      color: #fff;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 20px; font-weight: 600; }
+    header span { font-size: 13px; opacity: .75; }
+
+    /* ── 控制面板 ─────────────────────────────────────── */
+    .control-panel {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .control-panel label { font-size: 14px; color: #555; white-space: nowrap; }
+    .control-panel input[type="text"] {
+      flex: 1;
+      min-width: 260px;
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .control-panel input[type="text"]:focus { border-color: #1a73e8; }
+
+    .btn {
+      padding: 8px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background .2s, opacity .2s;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { background: #1a73e8; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #1558b0; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .btn-secondary:hover:not(:disabled) { background: #e0e0e0; }
+
+    /* ── 状态提示 ─────────────────────────────────────── */
+    #status-bar {
+      padding: 10px 32px;
+      font-size: 13px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-idle   { color: #888; }
+    .status-loading { color: #1a73e8; }
+    .status-success { color: #2e7d32; }
+    .status-error   { color: #c62828; }
+
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid #cce0ff;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── 主内容区 ─────────────────────────────────────── */
+    .main-content {
+      max-width: 900px;
+      margin: 24px auto;
+      padding: 0 24px;
+    }
+
+    /* ── 题解卡片 ─────────────────────────────────────── */
+    .solution-card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      padding: 32px 36px;
+      line-height: 1.8;
+    }
+
+    /* Markdown 渲染样式 */
+    .solution-card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 24px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #e8f0fe;
+      color: #1a73e8;
+    }
+    .solution-card h2:first-child { margin-top: 0; }
+    .solution-card p  { margin: 8px 0; }
+    .solution-card ul, .solution-card ol { padding-left: 20px; margin: 8px 0; }
+    .solution-card li { margin: 4px 0; }
+    .solution-card strong { color: #1a1a1a; }
+    .solution-card code {
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    /* ── SVG 可视化块 ─────────────────────────────────── */
+    .visual-block {
+      margin: 20px 0;
+      border: 1px solid #e8f0fe;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fafcff;
+    }
+    .visual-block-header {
+      background: #e8f0fe;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .visual-block-header .icon {
+      width: 18px; height: 18px;
+      background: #1a73e8;
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .visual-block-header .title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a73e8;
+    }
+    .visual-block-body {
+      padding: 16px;
+    }
+    .visual-block-body svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* 占位符（可视化数据未加载时） */
+    .visual-placeholder {
+      margin: 20px 0;
+      border: 2px dashed #ccc;
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: #aaa;
+      font-size: 13px;
+      background: #fafafa;
+    }
+
+    /* ── 空状态 ─────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #aaa;
+    }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state p { font-size: 15px; }
+
+    /* ── 题型标签 ─────────────────────────────────────── */
+    .problem-type-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .badge-chicken_rabbit { background: #fff3e0; color: #e65100; }
+    .badge-distance       { background: #e8f5e9; color: #2e7d32; }
+    .badge-unknown        { background: #f3f4f6; color: #666; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>题解可视化测试页</h1>
+  <span>SocraticTutorModule · Phase 3</span>
+</header>
+
+<!-- 控制面板 -->
+<div class="control-panel">
+  <label for="session-id-input">Session ID：</label>
+  <input type="text" id="session-id-input" placeholder="粘贴 session_id，例如 3f2a1b..." />
+  <button class="btn btn-primary" id="btn-load-solution" onclick="loadSolution()">加载题解</button>
+  <button class="btn btn-secondary" id="btn-gen-visual" onclick="generateVisualization()" disabled>生成可视化</button>
+  <button class="btn btn-secondary" onclick="clearAll()">清空</button>
+</div>
+
+<!-- 状态栏 -->
+<div id="status-bar">
+  <span class="status-idle">请输入 Session ID 后点击「加载题解」</span>
+</div>
+
+<!-- 主内容 -->
+<div class="main-content">
+  <div id="solution-container">
+    <div class="empty-state">
+      <div class="icon">📄</div>
+      <p>题解内容将在此处显示</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 全局状态 ────────────────────────────────────────────────
+let currentSessionId = null;
+let visualizationData = null;  // { problem_type, visuals: [{step_id, title, svg}] }
+let rawSolutionText = null;    // 原始 Markdown 文本（含 [VISUAL:xxx] 占位符）
+
+// ── API 基础 URL（开发时修改此处）──────────────────────────
+const API_BASE = 'http://localhost:8000';  // 空字符串表示同源，部署时填写后端地址如 http://localhost:8000
+
+// ── 工具函数 ────────────────────────────────────────────────
+function setStatus(msg, type = 'idle') {
+  const bar = document.getElementById('status-bar');
+  const spinner = type === 'loading' ? '<span class="spinner"></span>' : '';
+  bar.innerHTML = `${spinner}<span class="status-${type}">${msg}</span>`;
+}
+
+function getSessionId() {
+  return document.getElementById('session-id-input').value.trim();
+}
+
+function clearAll() {
+  currentSessionId = null;
+  visualizationData = null;
+  rawSolutionText = null;
+  document.getElementById('session-id-input').value = '';
+  document.getElementById('btn-gen-visual').disabled = true;
+  document.getElementById('solution-container').innerHTML = `
+    <div class="empty-state">
+      <div class="icon">📄</div>
+      <p>题解内容将在此处显示</p>
+    </div>`;
+  setStatus('已清空', 'idle');
+}
+
+// ── 渲染题解（将 [VISUAL:xxx] 替换为 SVG 或占位符）─────────
+function renderSolution(markdownText, visuals) {
+  // 将 [VISUAL:xxx] 替换为特殊 HTML 标记（marked 不会处理它）
+  // 先用唯一占位符保护，避免 Markdown 解析破坏
+  const PLACEHOLDER_PREFIX = '___VISUAL_PLACEHOLDER___';
+  let processedText = markdownText.replace(
+    /\[VISUAL:([^\]]+)\]/g,
+    (_, stepId) => `\n\n<div data-visual="${stepId}" class="visual-slot"></div>\n\n`
+  );
+
+  // 渲染 Markdown
+  const html = marked.parse(processedText);
+
+  // 构建 visual 查找表
+  const visualMap = {};
+  if (visuals) {
+    visuals.forEach(v => { visualMap[v.step_id] = v; });
+  }
+
+  // 将 visual-slot 替换为实际 SVG 块或占位符
+  const container = document.createElement('div');
+  container.innerHTML = html;
+
+  container.querySelectorAll('.visual-slot').forEach(slot => {
+    const stepId = slot.getAttribute('data-visual');
+    const visual = visualMap[stepId];
+
+    if (visual) {
+      const block = document.createElement('div');
+      block.className = 'visual-block';
+      block.innerHTML = `
+        <div class="visual-block-header">
+          <div class="icon">图</div>
+          <span class="title">${escapeHtml(visual.title)}</span>
+        </div>
+        <div class="visual-block-body">${visual.svg}</div>
+      `;
+      slot.replaceWith(block);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'visual-placeholder';
+      placeholder.textContent = `[ 可视化：${stepId} — 点击「生成可视化」加载 ]`;
+      slot.replaceWith(placeholder);
+    }
+  });
+
+  return container.innerHTML;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── 加载题解 ────────────────────────────────────────────────
+async function loadSolution() {
+  const sessionId = getSessionId();
+  if (!sessionId) {
+    setStatus('请先输入 Session ID', 'error');
+    return;
+  }
+
+  currentSessionId = sessionId;
+  setStatus('正在加载题解...', 'loading');
+  document.getElementById('btn-load-solution').disabled = true;
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/guide/sessions/${sessionId}/solution`);
+    const json = await resp.json();
+
+    if (!resp.ok || json.code !== 200) {
+      // 题解不存在，尝试触发生成
+      if (resp.status === 404) {
+        setStatus('题解尚未生成，正在生成中...', 'loading');
+        const genResp = await fetch(`${API_BASE}/api/guide/sessions/${sessionId}/solution`, {
+          method: 'POST'
+        });
+        const genJson = await genResp.json();
+        if (!genResp.ok || genJson.code !== 200) {
+          throw new Error(genJson.message || '题解生成失败');
+        }
+        rawSolutionText = genJson.data.solution;
+      } else {
+        throw new Error(json.message || '加载失败');
+      }
+    } else {
+      rawSolutionText = json.data.solution;
+    }
+
+    // 同时尝试加载已有的可视化数据
+    await tryLoadExistingVisualization(sessionId);
+
+    // 渲染题解
+    displaySolution();
+
+    setStatus(`题解加载成功${visualizationData ? '（含可视化）' : '，可点击「生成可视化」'}`, 'success');
+    document.getElementById('btn-gen-visual').disabled = false;
+
+  } catch (err) {
+    setStatus(`错误：${err.message}`, 'error');
+  } finally {
+    document.getElementById('btn-load-solution').disabled = false;
+  }
+}
+
+// ── 尝试加载已有可视化（不报错） ────────────────────────────
+async function tryLoadExistingVisualization(sessionId) {
+  try {
+    const resp = await fetch(`${API_BASE}/api/guide/sessions/${sessionId}/visualization`);
+    if (resp.ok) {
+      const json = await resp.json();
+      if (json.code === 200) {
+        visualizationData = json.data;
+      }
+    }
+  } catch (_) {
+    // 静默失败，可视化未生成属于正常情况
+  }
+}
+
+// ── 生成可视化 ───────────────────────────────────────────────
+async function generateVisualization() {
+  if (!currentSessionId) return;
+
+  setStatus('正在生成可视化（LLM 生成 SVG，约需 10~30 秒）...', 'loading');
+  document.getElementById('btn-gen-visual').disabled = true;
+
+  try {
+    const resp = await fetch(
+      `${API_BASE}/api/guide/sessions/${currentSessionId}/visualization`,
+      { method: 'POST' }
+    );
+    const json = await resp.json();
+
+    if (!resp.ok || json.code !== 200) {
+      throw new Error(json.message || '可视化生成失败');
+    }
+
+    visualizationData = json.data;
+
+    // 重新渲染题解（此时有了可视化数据）
+    displaySolution();
+
+    const typeLabel = {
+      chicken_rabbit: '鸡兔同笼',
+      distance: '行程问题',
+      unknown: '通用'
+    }[visualizationData.problem_type] || visualizationData.problem_type;
+
+    setStatus(
+      `可视化生成成功（题型：${typeLabel}，共 ${visualizationData.visuals.length} 个步骤图）`,
+      'success'
+    );
+
+  } catch (err) {
+    setStatus(`可视化生成失败：${err.message}`, 'error');
+  } finally {
+    document.getElementById('btn-gen-visual').disabled = false;
+  }
+}
+
+// ── 渲染到页面 ───────────────────────────────────────────────
+function displaySolution() {
+  if (!rawSolutionText) return;
+
+  const visuals = visualizationData ? visualizationData.visuals : null;
+  const renderedHtml = renderSolution(rawSolutionText, visuals);
+
+  // 题型标签
+  let badgeHtml = '';
+  if (visualizationData) {
+    const typeMap = {
+      chicken_rabbit: ['鸡兔同笼', 'badge-chicken_rabbit'],
+      distance:       ['行程问题', 'badge-distance'],
+      unknown:        ['其他题型', 'badge-unknown'],
+    };
+    const [label, cls] = typeMap[visualizationData.problem_type] || ['未知题型', 'badge-unknown'];
+    badgeHtml = `<span class="problem-type-badge ${cls}">${label}</span>`;
+  }
+
+  document.getElementById('solution-container').innerHTML = `
+    <div class="solution-card">
+      ${badgeHtml}
+      ${renderedHtml}
+    </div>
+  `;
+}
+
+// ── 回车触发加载 ─────────────────────────────────────────────
+document.getElementById('session-id-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadSolution();
+});
+</script>
+</body>
+</html>

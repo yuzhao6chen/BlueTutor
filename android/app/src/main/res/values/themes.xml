@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.BluetutorAndroid" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.BluetutorAndroid.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@android:color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/empty_splash_icon</item>
+        <item name="windowSplashScreenAnimationDuration">0</item>
+        <item name="postSplashScreenTheme">@style/Theme.BluetutorAndroid</item>
+    </style>
+</resources>
