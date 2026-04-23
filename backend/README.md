@@ -1,6 +1,9 @@
 ## Backend
 
-当前后端采用按功能划分的目录结构，核心目录在 `backend/app/` 下。
+当前后端采用按功能划分的目录结构，核心目录在 `backend/app/` 下。后端启动命令为：
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
 
 ## 1. Preview 模块
 

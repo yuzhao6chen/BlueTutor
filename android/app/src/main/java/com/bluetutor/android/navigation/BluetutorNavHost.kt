@@ -14,6 +14,8 @@ import com.bluetutor.android.feature.solve.SolveRoute
 fun BluetutorNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
+    onPreviewBottomBarVisibilityChange: (Boolean) -> Unit = {},
+    onProfileBottomBarVisibilityChange: (Boolean) -> Unit = {},
 ) {
     NavHost(
         navController = navController,
@@ -21,7 +23,7 @@ fun BluetutorNavHost(
         modifier = modifier,
     ) {
         composable(BluetutorDestination.Preview.route) {
-            PreviewRoute()
+            PreviewRoute(onBottomBarVisibilityChange = onPreviewBottomBarVisibilityChange)
         }
         composable(BluetutorDestination.Solve.route) {
             SolveRoute()
@@ -30,7 +32,7 @@ fun BluetutorNavHost(
             PracticeRoute()
         }
         composable(BluetutorDestination.Profile.route) {
-            ProfileRoute()
+            ProfileRoute(onBottomBarVisibilityChange = onProfileBottomBarVisibilityChange)
         }
     }
 }

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 T = TypeVar("T")
 
-PreviewSourceType = Literal["pdf_selection", "screenshot_ocr", "manual_input"]
+PreviewSourceType = Literal["pdf_selection", "screenshot_ocr", "manual_input", "quick_topic"]
 ChatMessageRole = Literal["user", "assistant"]
 
 
@@ -31,6 +31,8 @@ class PreviewKnowledgeRequest(BaseModel):
 		default="manual_input",
 		description="文本来源类型",
 	)
+	topic_id: str | None = Field(default=None, description="快捷预习专题 ID")
+	topic_title: str | None = Field(default=None, description="快捷预习专题标题")
 	page_hint: int | None = Field(default=None, ge=1, description="可选页码提示")
 	session_id: str | None = Field(default=None, description="预习会话 ID")
 
@@ -56,6 +58,8 @@ class PreviewChatRequest(BaseModel):
 	user_id: str = Field(min_length=1, description="用户标识")
 	text: str = Field(min_length=1, description="用户当前问题")
 	context_text: str = Field(min_length=1, description="当前页面或选中文本上下文")
+	topic_id: str | None = Field(default=None, description="快捷预习专题 ID")
+	topic_title: str | None = Field(default=None, description="快捷预习专题标题")
 	selected_knowledge_points: list[str] = Field(
 		default_factory=list,
 		description="用户已选择的知识点标题列表",

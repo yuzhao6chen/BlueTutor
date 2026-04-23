@@ -65,9 +65,11 @@ PREVIEW_CHAT_SYSTEM_PROMPT = dedent(
 ).strip()
 
 
-def build_knowledge_extraction_prompt(content_text: str) -> str:
+def build_knowledge_extraction_prompt(content_text: str, topic_title: str | None = None) -> str:
 	content_text = content_text.strip()
+	topic_title = (topic_title or "").strip()
 	output_schema = json.dumps(PREVIEW_KNOWLEDGE_OUTPUT_SCHEMA, ensure_ascii=False, indent=2)
+	topic_section = f"当前专题：\n{topic_title}\n\n" if topic_title else ""
 	return dedent(
 		f"""
 		{PREVIEW_KNOWLEDGE_SYSTEM_PROMPT}
@@ -75,7 +77,7 @@ def build_knowledge_extraction_prompt(content_text: str) -> str:
 
 		请分析以下预习内容，提取学生当前页面最可能需要理解的知识点。
 
-		待分析文本：
+		{topic_section}待分析文本：
 		{content_text}
 		"""
 	).strip()
@@ -85,20 +87,23 @@ def build_preview_chat_prompt(
 	text: str,
 	context_text: str,
 	selected_knowledge_points: list[str],
+	topic_title: str | None = None,
 	history: list[PreviewChatMessage] | None = None,
 ) -> str:
 	user_question = text.strip()
 	context_text = context_text.strip()
+	topic_title = (topic_title or "").strip()
 	knowledge_points_text = _format_selected_knowledge_points(selected_knowledge_points)
 	history_text = _format_history(history or [])
 	output_schema = json.dumps(PREVIEW_CHAT_OUTPUT_SCHEMA, ensure_ascii=False, indent=2)
+	topic_section = f"当前专题：\n{topic_title}\n\n" if topic_title else ""
 
 	return dedent(
 		f"""
 		{PREVIEW_CHAT_SYSTEM_PROMPT}
 		{output_schema}
 
-		当前页面内容：
+		{topic_section}当前页面内容：
 		{context_text}
 
 		用户当前选择的知识点：

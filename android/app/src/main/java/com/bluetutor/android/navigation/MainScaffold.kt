@@ -13,6 +13,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -26,53 +29,63 @@ fun MainScaffold() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val colorScheme = MaterialTheme.colorScheme
+    var previewBottomBarVisible by remember { mutableStateOf(true) }
+    var profileBottomBarVisible by remember { mutableStateOf(true) }
+
+    val shouldShowBottomBar = when (currentRoute) {
+        BluetutorDestination.Preview.route -> previewBottomBarVisible
+        BluetutorDestination.Profile.route -> profileBottomBarVisible
+        else -> true
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = colorScheme.background,
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier.height(60.dp),
-                containerColor = colorScheme.surface,
-                tonalElevation = BluetutorElevation.low,
-                windowInsets = WindowInsets(0, 0, 0, 0),
-            ) {
-                MainTab.entries.forEach { tab ->
-                    val selected = currentRoute == tab.destination.route
+            if (shouldShowBottomBar) {
+                NavigationBar(
+                    modifier = Modifier.height(60.dp),
+                    containerColor = colorScheme.surface,
+                    tonalElevation = BluetutorElevation.low,
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                ) {
+                    MainTab.entries.forEach { tab ->
+                        val selected = currentRoute == tab.destination.route
 
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(tab.destination.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                navController.navigate(tab.destination.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            androidx.compose.material3.Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.label,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = tab.label,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        },
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = colorScheme.primary,
-                            selectedTextColor = colorScheme.primary,
-                            unselectedIconColor = colorScheme.onSurfaceVariant,
-                            unselectedTextColor = colorScheme.onSurfaceVariant,
-                            indicatorColor = colorScheme.primaryContainer,
-                        ),
-                    )
+                            },
+                            icon = {
+                                androidx.compose.material3.Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.label,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = tab.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            alwaysShowLabel = true,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = colorScheme.primary,
+                                selectedTextColor = colorScheme.primary,
+                                unselectedIconColor = colorScheme.onSurfaceVariant,
+                                unselectedTextColor = colorScheme.onSurfaceVariant,
+                                indicatorColor = colorScheme.primaryContainer,
+                            ),
+                        )
+                    }
                 }
             }
         },
@@ -80,6 +93,8 @@ fun MainScaffold() {
         BluetutorNavHost(
             navController = navController,
             modifier = Modifier.padding(innerPadding),
+            onPreviewBottomBarVisibilityChange = { previewBottomBarVisible = it },
+            onProfileBottomBarVisibilityChange = { profileBottomBarVisible = it },
         )
     }
 }
