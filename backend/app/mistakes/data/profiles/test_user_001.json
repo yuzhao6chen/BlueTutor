@@ -1,0 +1,14 @@
+{
+  "user_id": "test_user_001",
+  "total_reports": 0,
+  "pending_count": 0,
+  "mastered_count": 0,
+  "weak_knowledge_tags": [],
+  "weak_points": [],
+  "error_type_distribution": {},
+  "independence_summary": "暂无数据",
+  "learning_style_hints": [
+    "继续保持良好的学习习惯，定期回顾错题"
+  ],
+  "updated_at": "2026-04-23T14:44:37.391222+00:00"
+}

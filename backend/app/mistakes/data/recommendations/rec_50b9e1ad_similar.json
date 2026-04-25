@@ -1,0 +1,52 @@
+{
+  "recommendation_id": "rec_50b9e1ad_similar",
+  "origin_report_id": "mr_063950b9e1ad",
+  "recommendation_type": "similar",
+  "title": "相似练习题",
+  "difficulty": "easy",
+  "question": "与原题相关的行程问题练习题",
+  "options": [
+    {
+      "id": "A",
+      "text": "正确答案选项"
+    },
+    {
+      "id": "B",
+      "text": "常见错误选项"
+    },
+    {
+      "id": "C",
+      "text": "计算偏差选项"
+    },
+    {
+      "id": "D",
+      "text": "概念混淆选项"
+    }
+  ],
+  "correct_option_id": "A",
+  "answer": "根据题意计算得出",
+  "explanation": "根据已知条件逐步推导即可",
+  "knowledge_tags": [
+    "行程问题",
+    "追及问题"
+  ],
+  "why_recommended": "针对速度差理解不足进行针对性练习",
+  "agent_traces": [
+    {
+      "agent": "profile-aware-analyzer",
+      "status": "success",
+      "summary": "针对速度差理解不足生成练习题"
+    },
+    {
+      "agent": "profile-aware-generator",
+      "status": "success",
+      "summary": "相似练习题"
+    },
+    {
+      "agent": "quality-reviewer",
+      "status": "success",
+      "summary": "质量审核完成"
+    }
+  ],
+  "generated_at": "2026-04-20T12:40:54.317023+00:00"
+}

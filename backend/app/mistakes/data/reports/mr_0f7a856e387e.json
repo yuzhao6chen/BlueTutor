@@ -1,0 +1,49 @@
+{
+  "report_id": "mr_0f7a856e387e",
+  "user_id": "test-user-da4af499",
+  "report_title": "?????",
+  "source_session_id": "session-?????",
+  "status": "pending",
+  "knowledge_tags": [
+    "????"
+  ],
+  "primary_error_type": "????",
+  "independence_level": "????",
+  "has_solution": false,
+  "solution_preview": "",
+  "created_at": "2026-04-18T11:17:02.369610+00:00",
+  "problem_preview": "??????",
+  "report": {
+    "problem": {
+      "raw_problem": "??????",
+      "known_conditions": [
+        "???? 1"
+      ],
+      "goal": "???",
+      "answer": "????"
+    },
+    "knowledge_tags": [
+      "????"
+    ],
+    "thinking_chain": [
+      {
+        "node_id": "n1",
+        "content": "??????",
+        "status": "correct",
+        "parent_id": null,
+        "error_history": []
+      }
+    ],
+    "error_profile": [
+      {
+        "error_type": "????",
+        "detail": "??????"
+      }
+    ],
+    "independence_evaluation": {
+      "level": "????",
+      "detail": "????"
+    },
+    "solution": null
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "user_id": "test-user-6a511937",
+  "total_reports": 1,
+  "pending_count": 1,
+  "mastered_count": 0,
+  "weak_knowledge_tags": [
+    "????"
+  ],
+  "weak_points": [
+    {
+      "knowledge_tag": "????",
+      "error_types": [
+        "???????"
+      ],
+      "frequency": 2,
+      "latest_report_ids": [
+        "mr_1bbc22483fff"
+      ]
+    }
+  ],
+  "error_type_distribution": {
+    "???????": 1
+  },
+  "independence_summary": "独立完成度偏低（0/1次需要帮助），建议从基础概念开始复习",
+  "learning_style_hints": [
+    "继续保持良好的学习习惯，定期回顾错题"
+  ],
+  "updated_at": "2026-04-20T11:50:52.837533+00:00"
+}

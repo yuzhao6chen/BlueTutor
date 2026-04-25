@@ -1,0 +1,53 @@
+{
+  "report_id": "mr_a33244b6c89c",
+  "user_id": "redo-user",
+  "report_title": "追及问题重做测试",
+  "source_session_id": "redo-session-source",
+  "status": "pending",
+  "knowledge_tags": [
+    "行程问题",
+    "追及问题"
+  ],
+  "primary_error_type": "速度差理解不足",
+  "independence_level": "需要提示",
+  "has_solution": true,
+  "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…",
+  "created_at": "2026-04-18T14:16:15.901131+00:00",
+  "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+  "report": {
+    "problem": {
+      "raw_problem": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明多久追上？",
+      "known_conditions": [
+        "小明速度60米/分",
+        "小红速度40米/分",
+        "小红先走5分钟"
+      ],
+      "goal": "求小明追上小红所需时间",
+      "answer": "10分钟"
+    },
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "thinking_chain": [
+      {
+        "node_id": "n1",
+        "content": "先求小红先走路程，再算速度差，最后求追及时间",
+        "status": "correct",
+        "parent_id": null,
+        "error_history": []
+      }
+    ],
+    "error_profile": [
+      {
+        "error_type": "速度差理解不足",
+        "detail": "忘记先算速度差"
+      }
+    ],
+    "independence_evaluation": {
+      "level": "需要提示",
+      "detail": "测试场景"
+    },
+    "solution": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟。"
+  }
+}

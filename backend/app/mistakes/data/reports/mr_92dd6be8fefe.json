@@ -1,0 +1,53 @@
+{
+  "report_id": "mr_92dd6be8fefe",
+  "user_id": "profile-user-a427b9bd",
+  "report_title": "测试题-概念混淆",
+  "source_session_id": "session-7a54e017",
+  "status": "pending",
+  "knowledge_tags": [
+    "分数运算",
+    "通分"
+  ],
+  "primary_error_type": "概念混淆",
+  "independence_level": "需要帮助",
+  "has_solution": true,
+  "solution_preview": "根据公式计算即可。",
+  "created_at": "2026-04-20T12:40:54.168927+00:00",
+  "problem_preview": "计算 1/2 + 1/3",
+  "report": {
+    "problem": {
+      "raw_problem": "计算 1/2 + 1/3",
+      "known_conditions": [
+        "条件1"
+      ],
+      "goal": "求解",
+      "answer": "42"
+    },
+    "knowledge_tags": [
+      "分数运算",
+      "通分"
+    ],
+    "thinking_chain": [
+      {
+        "node_id": "n1",
+        "content": "第一步分析",
+        "status": "incorrect",
+        "parent_id": null,
+        "error_history": [
+          "概念混淆"
+        ]
+      }
+    ],
+    "error_profile": [
+      {
+        "error_type": "概念混淆",
+        "detail": "概念混淆的详细描述"
+      }
+    ],
+    "independence_evaluation": {
+      "level": "需要帮助",
+      "detail": "测试场景"
+    },
+    "solution": "根据公式计算即可。"
+  }
+}

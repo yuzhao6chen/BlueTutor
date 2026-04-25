@@ -1,0 +1,85 @@
+{
+  "session_id": "redo_a32eab232d80",
+  "report_id": "mr_c18b73bdbabe",
+  "user_id": "redo-user",
+  "report_title": "追及问题重做测试",
+  "problem_text": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明多久追上？",
+  "stage": "understand_problem",
+  "turn_count": 2,
+  "current_prompt": "请仔细读题，选出你对题目的理解",
+  "interaction_mode": "single_choice",
+  "options": [
+    {
+      "id": "A",
+      "text": "求追及时间"
+    },
+    {
+      "id": "B",
+      "text": "求路程差"
+    },
+    {
+      "id": "C",
+      "text": "求速度和"
+    },
+    {
+      "id": "D",
+      "text": "求相遇时间"
+    }
+  ],
+  "hint": "需要知道路程差和速度差才能求时间",
+  "hint_level": 3,
+  "max_hint_level": 3,
+  "last_feedback": "不太对，再想想看",
+  "is_completed": false,
+  "can_clear_mistake": false,
+  "consecutive_correct": 0,
+  "required_consecutive_correct": 1,
+  "session_type": "redo_original",
+  "recommendation_id": null,
+  "agent_traces": [
+    {
+      "agent": "response-evaluator",
+      "status": "success",
+      "summary": "评估结果：incorrect"
+    },
+    {
+      "agent": "pedagogy-planner",
+      "status": "success",
+      "summary": "理解题意"
+    },
+    {
+      "agent": "option-generator",
+      "status": "success",
+      "summary": "生成选项"
+    },
+    {
+      "agent": "hint-generator",
+      "status": "success",
+      "summary": "生成提示（等级3）"
+    }
+  ],
+  "history": [
+    {
+      "turn_no": 1,
+      "prompt": "请仔细读题，选出你对题目的理解",
+      "interaction_mode": "single_choice",
+      "student_answer": "Z",
+      "result": "incorrect",
+      "feedback": "不太对，再想想看",
+      "hint": "仔细看题目问的是什么",
+      "stage": "understand_problem"
+    },
+    {
+      "turn_no": 2,
+      "prompt": "请仔细读题，选出你对题目的理解",
+      "interaction_mode": "single_choice",
+      "student_answer": "Z",
+      "result": "incorrect",
+      "feedback": "不太对，再想想看",
+      "hint": "题目问的是时间，想想需要知道哪些条件",
+      "stage": "understand_problem"
+    }
+  ],
+  "created_at": "2026-04-20T08:50:48.102999+00:00",
+  "updated_at": "2026-04-20T08:50:48.106240+00:00"
+}

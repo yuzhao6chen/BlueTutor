@@ -1,0 +1,934 @@
+{
+  "mr_c1f0f6ccf8ec": {
+    "report_id": "mr_c1f0f6ccf8ec",
+    "user_id": "filter-user",
+    "report_title": "筛选测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T09:05:27.502738+00:00",
+    "problem_preview": "测试题",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先求速度差再求时间"
+  },
+  "mr_a30fbdbe192c": {
+    "report_id": "mr_a30fbdbe192c",
+    "user_id": "test-user",
+    "report_title": "追及问题一",
+    "status": "mastered",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T09:46:02.357351+00:00",
+    "problem_preview": "小明追小红，求多久追上。",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先求速度差，再求追及时间。"
+  },
+  "mr_f8164e26b3b5": {
+    "report_id": "mr_f8164e26b3b5",
+    "user_id": "test-user",
+    "report_title": "分数问题二",
+    "status": "pending",
+    "primary_error_type": "约分遗漏",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T09:46:02.370080+00:00",
+    "problem_preview": "求分数结果。",
+    "knowledge_tags": [
+      "分数运算"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_38971c67449f": {
+    "report_id": "mr_38971c67449f",
+    "user_id": "test-user",
+    "report_title": "追及问题一",
+    "status": "mastered",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T09:59:02.505804+00:00",
+    "problem_preview": "小明追小红，求多久追上。",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先求速度差，再求追及时间。"
+  },
+  "mr_4f9a8377f613": {
+    "report_id": "mr_4f9a8377f613",
+    "user_id": "test-user",
+    "report_title": "分数问题二",
+    "status": "pending",
+    "primary_error_type": "约分遗漏",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T09:59:02.519068+00:00",
+    "problem_preview": "求分数结果。",
+    "knowledge_tags": [
+      "分数运算"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_699f10863afd": {
+    "report_id": "mr_699f10863afd",
+    "user_id": "agent-user",
+    "report_title": "追及问题智能推荐源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T09:59:02.751842+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程，再算速度差，最后求追及时间。"
+  },
+  "mr_516e60e02135": {
+    "report_id": "mr_516e60e02135",
+    "user_id": "test-user-39e62072",
+    "report_title": "?????",
+    "status": "mastered",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T10:04:04.843178+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_6e127459e63a": {
+    "report_id": "mr_6e127459e63a",
+    "user_id": "test-user-39e62072",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T10:04:04.847817+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_89098e12a5da": {
+    "report_id": "mr_89098e12a5da",
+    "user_id": "agent-user",
+    "report_title": "追及问题智能推荐源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T10:04:05.084854+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程，再算速度差，最后求追及时间。"
+  },
+  "mr_9bf1cdaef1b9": {
+    "report_id": "mr_9bf1cdaef1b9",
+    "user_id": "test-user-8af29221",
+    "report_title": "?????",
+    "status": "mastered",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T10:23:30.663010+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_9171d7a81cfe": {
+    "report_id": "mr_9171d7a81cfe",
+    "user_id": "test-user-8af29221",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T10:23:30.666183+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_11030f9663f2": {
+    "report_id": "mr_11030f9663f2",
+    "user_id": "agent-user",
+    "report_title": "追及问题智能推荐源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T10:23:30.899046+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程，再算速度差，最后求追及时间。"
+  },
+  "mr_9b11e81bf15d": {
+    "report_id": "mr_9b11e81bf15d",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T10:23:31.174003+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_833b2b3d23ba": {
+    "report_id": "mr_833b2b3d23ba",
+    "user_id": "test-user-da4af499",
+    "report_title": "?????",
+    "status": "mastered",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T11:17:02.365585+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_0f7a856e387e": {
+    "report_id": "mr_0f7a856e387e",
+    "user_id": "test-user-da4af499",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T11:17:02.369610+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_d3f8fa1c466b": {
+    "report_id": "mr_d3f8fa1c466b",
+    "user_id": "agent-user",
+    "report_title": "追及问题智能推荐源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:17:02.603114+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程，再算速度差，最后求追及时间。"
+  },
+  "mr_19195e2983d3": {
+    "report_id": "mr_19195e2983d3",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:17:02.844581+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_44cc6621d931": {
+    "report_id": "mr_44cc6621d931",
+    "user_id": "loop-user",
+    "report_title": "推荐题闭环源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:17:03.100543+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算速度差，再求追及时间。"
+  },
+  "mr_b376cd0ecb58": {
+    "report_id": "mr_b376cd0ecb58",
+    "user_id": "test-user-fdb1b33f",
+    "report_title": "?????",
+    "status": "mastered",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T11:17:16.831248+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_b043b5130b81": {
+    "report_id": "mr_b043b5130b81",
+    "user_id": "test-user-fdb1b33f",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T11:17:16.845843+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_b3f6b07c6579": {
+    "report_id": "mr_b3f6b07c6579",
+    "user_id": "agent-user",
+    "report_title": "追及问题智能推荐源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:17:18.893673+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程，再算速度差，最后求追及时间。"
+  },
+  "mr_f7721f469f8d": {
+    "report_id": "mr_f7721f469f8d",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:17:20.768637+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_3584379e5141": {
+    "report_id": "mr_3584379e5141",
+    "user_id": "loop-user",
+    "report_title": "推荐题闭环源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:17:22.773376+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算速度差，再求追及时间。"
+  },
+  "mr_b4edf9caa926": {
+    "report_id": "mr_b4edf9caa926",
+    "user_id": "loop-user",
+    "report_title": "推荐题闭环源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:17:45.685590+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算速度差，再求追及时间。"
+  },
+  "mr_eda207770737": {
+    "report_id": "mr_eda207770737",
+    "user_id": "loop-user",
+    "report_title": "????? - ?????",
+    "status": "pending",
+    "primary_error_type": "???????",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:17:45.689064+00:00",
+    "problem_preview": "?????????????行程问题??",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "??????????????????"
+  },
+  "mr_87f1277ac2dd": {
+    "report_id": "mr_87f1277ac2dd",
+    "user_id": "loop-user",
+    "report_title": "推荐题闭环源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:18:04.480215+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算速度差，再求追及时间。"
+  },
+  "mr_22214ae1b76b": {
+    "report_id": "mr_22214ae1b76b",
+    "user_id": "loop-user",
+    "report_title": "????? - ?????",
+    "status": "pending",
+    "primary_error_type": "???????",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:18:04.480687+00:00",
+    "problem_preview": "?????????????行程问题??",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "??????????????????"
+  },
+  "mr_5b5d99900178": {
+    "report_id": "mr_5b5d99900178",
+    "user_id": "loop-user",
+    "report_title": "推荐题闭环源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:18:35.229963+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算速度差，再求追及时间。"
+  },
+  "mr_c72fc0284a24": {
+    "report_id": "mr_c72fc0284a24",
+    "user_id": "loop-user",
+    "report_title": "????? - ?????",
+    "status": "pending",
+    "primary_error_type": "???????",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T11:18:35.229963+00:00",
+    "problem_preview": "?????????????行程问题??",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "??????????????????"
+  },
+  "mr_878e730a13c8": {
+    "report_id": "mr_878e730a13c8",
+    "user_id": "test-user-bbbd466c",
+    "report_title": "?????",
+    "status": "mastered",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T14:00:49.133359+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_a17bc5723854": {
+    "report_id": "mr_a17bc5723854",
+    "user_id": "test-user-bbbd466c",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-18T14:00:49.142189+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_efb2600fa9c9": {
+    "report_id": "mr_efb2600fa9c9",
+    "user_id": "agent-user",
+    "report_title": "追及问题智能推荐源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T14:00:49.383322+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程，再算速度差，最后求追及时间。"
+  },
+  "mr_dc080aaea2bd": {
+    "report_id": "mr_dc080aaea2bd",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T14:00:49.612438+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_a33244b6c89c": {
+    "report_id": "mr_a33244b6c89c",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T14:16:15.901131+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_52bb8e12ac3c": {
+    "report_id": "mr_52bb8e12ac3c",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "mastered",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-18T14:18:04.225418+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_c73fd16696e1": {
+    "report_id": "mr_c73fd16696e1",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-20T08:50:47.943171+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_c18b73bdbabe": {
+    "report_id": "mr_c18b73bdbabe",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-20T08:50:48.100974+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_7e56a763657a": {
+    "report_id": "mr_7e56a763657a",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-20T08:50:48.208054+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_24dac108f68e": {
+    "report_id": "mr_24dac108f68e",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-20T08:50:48.311277+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_d696214c2ecd": {
+    "report_id": "mr_d696214c2ecd",
+    "user_id": "redo-user",
+    "report_title": "追及问题重做测试",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-20T08:50:48.414073+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程40×5=200米，再算速度差60-40=20米/分，最后200÷20=10分钟…"
+  },
+  "mr_960dcb7d00ec": {
+    "report_id": "mr_960dcb7d00ec",
+    "user_id": "test-user-4221e390",
+    "report_title": "?????",
+    "status": "mastered",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T08:50:57.938962+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_2ca990acdcb6": {
+    "report_id": "mr_2ca990acdcb6",
+    "user_id": "test-user-4221e390",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T08:50:58.021345+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_6e5ae50fbf67": {
+    "report_id": "mr_6e5ae50fbf67",
+    "user_id": "agent-user",
+    "report_title": "追及问题智能推荐源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-20T08:51:00.439872+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程，再算速度差，最后求追及时间。"
+  },
+  "mr_5c0026cb36be": {
+    "report_id": "mr_5c0026cb36be",
+    "user_id": "test-user-fac200df",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T11:49:38.999088+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_46b2475383d0": {
+    "report_id": "mr_46b2475383d0",
+    "user_id": "test-user-fac200df",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T11:49:39.002201+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_1bbc22483fff": {
+    "report_id": "mr_1bbc22483fff",
+    "user_id": "test-user-6a511937",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T11:50:52.833979+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_a104328ac0a6": {
+    "report_id": "mr_a104328ac0a6",
+    "user_id": "test-user-6a511937",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T11:50:52.839665+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_80db63ac89d5": {
+    "report_id": "mr_80db63ac89d5",
+    "user_id": "test-user-beb97817",
+    "report_title": "?????",
+    "status": "mastered",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T11:56:55.762482+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_1c103a651bc4": {
+    "report_id": "mr_1c103a651bc4",
+    "user_id": "test-user-beb97817",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T11:56:55.852852+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_5c425642d917": {
+    "report_id": "mr_5c425642d917",
+    "user_id": "agent-user",
+    "report_title": "追及问题智能推荐源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-20T11:57:03.058871+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程，再算速度差，最后求追及时间。"
+  },
+  "mr_98f3b278922f": {
+    "report_id": "mr_98f3b278922f",
+    "user_id": "profile-user-299e1318",
+    "report_title": "测试题-概念混淆",
+    "status": "pending",
+    "primary_error_type": "概念混淆",
+    "independence_level": "需要帮助",
+    "created_at": "2026-04-20T11:58:09.736064+00:00",
+    "problem_preview": "计算 1/2 + 1/3",
+    "knowledge_tags": [
+      "分数运算",
+      "通分"
+    ],
+    "has_solution": true,
+    "solution_preview": "根据公式计算即可。"
+  },
+  "mr_de5ee12fb3eb": {
+    "report_id": "mr_de5ee12fb3eb",
+    "user_id": "profile-user-299e1318",
+    "report_title": "测试题-计算粗心",
+    "status": "pending",
+    "primary_error_type": "计算粗心",
+    "independence_level": "需要帮助",
+    "created_at": "2026-04-20T11:58:09.739561+00:00",
+    "problem_preview": "计算 2/3 - 1/4",
+    "knowledge_tags": [
+      "分数运算",
+      "约分"
+    ],
+    "has_solution": true,
+    "solution_preview": "根据公式计算即可。"
+  },
+  "mr_92dd6be8fefe": {
+    "report_id": "mr_92dd6be8fefe",
+    "user_id": "profile-user-a427b9bd",
+    "report_title": "测试题-概念混淆",
+    "status": "pending",
+    "primary_error_type": "概念混淆",
+    "independence_level": "需要帮助",
+    "created_at": "2026-04-20T12:40:54.168927+00:00",
+    "problem_preview": "计算 1/2 + 1/3",
+    "knowledge_tags": [
+      "分数运算",
+      "通分"
+    ],
+    "has_solution": true,
+    "solution_preview": "根据公式计算即可。"
+  },
+  "mr_6159fb9dcb5c": {
+    "report_id": "mr_6159fb9dcb5c",
+    "user_id": "profile-user-a427b9bd",
+    "report_title": "测试题-计算粗心",
+    "status": "pending",
+    "primary_error_type": "计算粗心",
+    "independence_level": "需要帮助",
+    "created_at": "2026-04-20T12:40:54.173661+00:00",
+    "problem_preview": "计算 2/3 - 1/4",
+    "knowledge_tags": [
+      "分数运算",
+      "约分"
+    ],
+    "has_solution": true,
+    "solution_preview": "根据公式计算即可。"
+  },
+  "mr_063950b9e1ad": {
+    "report_id": "mr_063950b9e1ad",
+    "user_id": "rec-user-4af95736",
+    "report_title": "测试题-速度差理解不足",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要帮助",
+    "created_at": "2026-04-20T12:40:54.313519+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "根据公式计算即可。"
+  },
+  "mr_9d48107f21a5": {
+    "report_id": "mr_9d48107f21a5",
+    "user_id": "dlg-user-cde9c1b2",
+    "report_title": "测试题-速度差理解不足",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要帮助",
+    "created_at": "2026-04-20T12:40:54.413239+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "根据公式计算即可。"
+  },
+  "mr_55d2c812e907": {
+    "report_id": "mr_55d2c812e907",
+    "user_id": "test-user-e45c70ef",
+    "report_title": "?????",
+    "status": "mastered",
+    "primary_error_type": "???????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T12:41:25.752956+00:00",
+    "problem_preview": "????????????",
+    "knowledge_tags": [
+      "????",
+      "????"
+    ],
+    "has_solution": true,
+    "solution_preview": "?????????????"
+  },
+  "mr_8eec0192f502": {
+    "report_id": "mr_8eec0192f502",
+    "user_id": "test-user-e45c70ef",
+    "report_title": "?????",
+    "status": "pending",
+    "primary_error_type": "????",
+    "independence_level": "????",
+    "created_at": "2026-04-20T12:41:25.849114+00:00",
+    "problem_preview": "??????",
+    "knowledge_tags": [
+      "????"
+    ],
+    "has_solution": false,
+    "solution_preview": ""
+  },
+  "mr_237d86312836": {
+    "report_id": "mr_237d86312836",
+    "user_id": "agent-user",
+    "report_title": "追及问题智能推荐源题",
+    "status": "pending",
+    "primary_error_type": "速度差理解不足",
+    "independence_level": "需要提示",
+    "created_at": "2026-04-20T12:41:26.443150+00:00",
+    "problem_preview": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明…",
+    "knowledge_tags": [
+      "行程问题",
+      "追及问题"
+    ],
+    "has_solution": true,
+    "solution_preview": "先算小红先走路程，再算速度差，最后求追及时间。"
+  }
+}

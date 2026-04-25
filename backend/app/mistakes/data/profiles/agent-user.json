@@ -1,0 +1,49 @@
+{
+  "user_id": "agent-user",
+  "total_reports": 9,
+  "pending_count": 9,
+  "mastered_count": 0,
+  "weak_knowledge_tags": [
+    "行程问题",
+    "追及问题"
+  ],
+  "weak_points": [
+    {
+      "knowledge_tag": "行程问题",
+      "error_types": [
+        "速度差理解不足"
+      ],
+      "frequency": 8,
+      "latest_report_ids": [
+        "mr_b3f6b07c6579",
+        "mr_d3f8fa1c466b",
+        "mr_11030f9663f2",
+        "mr_89098e12a5da",
+        "mr_699f10863afd"
+      ]
+    },
+    {
+      "knowledge_tag": "追及问题",
+      "error_types": [
+        "速度差理解不足"
+      ],
+      "frequency": 8,
+      "latest_report_ids": [
+        "mr_b3f6b07c6579",
+        "mr_d3f8fa1c466b",
+        "mr_11030f9663f2",
+        "mr_89098e12a5da",
+        "mr_699f10863afd"
+      ]
+    }
+  ],
+  "error_type_distribution": {
+    "速度差理解不足": 8
+  },
+  "independence_summary": "独立完成度偏低（0/8次需要帮助），建议从基础概念开始复习",
+  "learning_style_hints": [
+    "「行程问题」反复出错，建议从基础概念重新梳理",
+    "「速度差理解不足」类错误频繁出现，注意区分易混淆概念"
+  ],
+  "updated_at": "2026-04-20T12:41:26.445160+00:00"
+}

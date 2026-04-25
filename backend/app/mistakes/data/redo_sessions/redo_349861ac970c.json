@@ -1,0 +1,140 @@
+{
+  "session_id": "redo_349861ac970c",
+  "session_type": "redo_original",
+  "report_id": "mr_52bb8e12ac3c",
+  "recommendation_id": null,
+  "user_id": "redo-user",
+  "report_title": "追及问题重做测试",
+  "problem_text": "小明每分钟走60米，小红每分钟走40米，小红先走5分钟，小明多久追上？",
+  "reference_answer": "10分钟",
+  "knowledge_tags": [
+    "行程问题",
+    "追及问题"
+  ],
+  "stage": "completed",
+  "turn_count": 3,
+  "current_prompt": "??????????????????",
+  "interaction_mode": "free_text",
+  "options": [],
+  "current_correct_option_id": "",
+  "hint": "把关键数量关系说出来再列式。",
+  "hint_level": 0,
+  "last_feedback": "??????????????????",
+  "is_completed": true,
+  "can_clear_mistake": true,
+  "mastery_score": 6,
+  "mistake_event_count": 0,
+  "diagram": {
+    "diagram_type": "step_flow",
+    "title": "图解理解",
+    "focus_points": [
+      "行程问题",
+      "追及问题"
+    ],
+    "caption": "可用于前端后续接入画图理解能力。"
+  },
+  "session_report": {
+    "summary": "本题已经基本掌握。",
+    "strengths": [
+      "能够继续推进解题步骤"
+    ],
+    "next_actions": [
+      "继续下一题训练"
+    ],
+    "mastery_recommendation": "mastered"
+  },
+  "agent_traces": [
+    {
+      "agent": "pedagogy-planner",
+      "status": "success",
+      "summary": "???????"
+    },
+    {
+      "agent": "option-generator",
+      "status": "success",
+      "summary": "完成选项生成"
+    },
+    {
+      "agent": "hint-generator",
+      "status": "success",
+      "summary": "提示等级 0"
+    },
+    {
+      "agent": "response-evaluator",
+      "status": "success",
+      "summary": "结果：correct"
+    },
+    {
+      "agent": "pedagogy-planner",
+      "status": "success",
+      "summary": "?????"
+    },
+    {
+      "agent": "option-generator",
+      "status": "success",
+      "summary": "完成选项生成"
+    },
+    {
+      "agent": "hint-generator",
+      "status": "success",
+      "summary": "提示等级 0"
+    },
+    {
+      "agent": "response-evaluator",
+      "status": "success",
+      "summary": "结果：correct"
+    },
+    {
+      "agent": "pedagogy-planner",
+      "status": "success",
+      "summary": "??????"
+    },
+    {
+      "agent": "hint-generator",
+      "status": "success",
+      "summary": "提示等级 0"
+    },
+    {
+      "agent": "response-evaluator",
+      "status": "success",
+      "summary": "结果：correct"
+    }
+  ],
+  "history": [
+    {
+      "turn_no": 1,
+      "prompt": "??????????????",
+      "interaction_mode": "single_choice",
+      "student_answer": "A",
+      "result": "correct",
+      "feedback": "??????????????",
+      "hint": "",
+      "stage": "understand_problem",
+      "hint_level": 0
+    },
+    {
+      "turn_no": 2,
+      "prompt": "???????????????????",
+      "interaction_mode": "single_choice",
+      "student_answer": "A",
+      "result": "correct",
+      "feedback": "??????????????",
+      "hint": "",
+      "stage": "identify_first_step",
+      "hint_level": 0
+    },
+    {
+      "turn_no": 3,
+      "prompt": "??????????????????",
+      "interaction_mode": "free_text",
+      "student_answer": "10分钟",
+      "result": "correct",
+      "feedback": "??????????????????",
+      "hint": "",
+      "stage": "solve",
+      "hint_level": 0
+    }
+  ],
+  "created_at": "2026-04-18T14:18:04.227504+00:00",
+  "updated_at": "2026-04-18T14:18:04.229792+00:00"
+}
