@@ -18,6 +18,14 @@ try:
 except ModuleNotFoundError as exc:
     guide_import_error = exc
 
+mistakes_router = None
+mistakes_import_error: ModuleNotFoundError | None = None
+
+try:
+    from .api.mistakes_api import mistakes_router
+except ModuleNotFoundError as exc:
+    mistakes_import_error = exc
+
 
 app = FastAPI(
     title="BlueTutor Backend",
@@ -35,6 +43,14 @@ elif guide_import_error is not None:
     logger.warning(
         "Guide routes were not registered because dependency %s is missing.",
         guide_import_error.name,
+    )
+
+if mistakes_router is not None:
+    app.include_router(mistakes_router)
+elif mistakes_import_error is not None:
+    logger.warning(
+        "Mistakes routes were not registered because dependency %s is missing.",
+        mistakes_import_error.name,
     )
 
 app.add_middleware(
