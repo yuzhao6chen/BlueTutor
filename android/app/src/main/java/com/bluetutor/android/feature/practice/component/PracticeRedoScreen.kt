@@ -43,6 +43,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -56,6 +57,7 @@ import com.bluetutor.android.feature.practice.data.MistakeRedoOptionResult
 import com.bluetutor.android.feature.practice.data.MistakeRedoSessionResult
 import com.bluetutor.android.feature.practice.data.MistakeRedoTurnResult
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
+import com.bluetutor.android.feature.practice.data.PracticeLocalCache
 import com.bluetutor.android.feature.practice.resultColor
 import com.bluetutor.android.feature.practice.resultDisplayName
 import com.bluetutor.android.feature.practice.stageDisplayName
@@ -71,13 +73,23 @@ fun PracticeRedoScreen(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var state by remember { mutableStateOf(PracticeRedoState()) }
+    var state by remember(context, reportId) {
+        val cachedSession = PracticeLocalCache.readRedoSessionByReportId(context, reportId)
+        mutableStateOf(
+            PracticeRedoState(
+                isLoading = cachedSession == null,
+                session = cachedSession,
+            ),
+        )
+    }
 
     LaunchedEffect(reportId) {
         onBottomBarVisibilityChange(false)
         try {
             val session = MistakesApiClient.startRedoSession(reportId)
+            PracticeLocalCache.saveRedoSession(context, session)
             state = state.copy(isLoading = false, session = session)
         } catch (e: Exception) {
             state = state.copy(isLoading = false, error = e.message)
@@ -103,6 +115,7 @@ fun PracticeRedoScreen(
                         state = state.copy(isLoading = true, error = null)
                         try {
                             val session = MistakesApiClient.startRedoSession(reportId)
+                            PracticeLocalCache.saveRedoSession(context, session)
                             state = state.copy(isLoading = false, session = session)
                         } catch (e: Exception) {
                             state = state.copy(isLoading = false, error = e.message)
@@ -137,6 +150,7 @@ fun PracticeRedoScreen(
                                         state.session!!.sessionId,
                                         answer,
                                     )
+                                    PracticeLocalCache.saveRedoSession(context, updated)
                                     state = state.copy(
                                         isSubmitting = false,
                                         session = updated,
@@ -165,6 +179,7 @@ fun PracticeRedoSessionScreen(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(PracticeRedoState()) }
 
@@ -172,6 +187,7 @@ fun PracticeRedoSessionScreen(
         onBottomBarVisibilityChange(false)
         try {
             val session = MistakesApiClient.getRedoSession(sessionId)
+            PracticeLocalCache.saveRedoSession(context, session)
             state = state.copy(isLoading = false, session = session)
         } catch (e: Exception) {
             state = state.copy(isLoading = false, error = e.message)
@@ -194,6 +210,7 @@ fun PracticeRedoSessionScreen(
                         state = state.copy(isLoading = true, error = null)
                         try {
                             val session = MistakesApiClient.getRedoSession(sessionId)
+                            PracticeLocalCache.saveRedoSession(context, session)
                             state = state.copy(isLoading = false, session = session)
                         } catch (e: Exception) {
                             state = state.copy(isLoading = false, error = e.message)
@@ -228,6 +245,7 @@ fun PracticeRedoSessionScreen(
                                         state.session!!.sessionId,
                                         answer,
                                     )
+                                    PracticeLocalCache.saveRedoSession(context, updated)
                                     state = state.copy(isSubmitting = false, session = updated, showHint = false)
                                 } catch (e: Exception) {
                                     state = state.copy(isSubmitting = false, error = e.message)

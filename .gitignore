@@ -51,6 +51,8 @@ temp/
 backend/data/preview_logs/
 backend/data/preview_cache/
 backend/app/guide/data
+backend/app/mistakes/data
+docs/develop
 
 # ===== Jupyter =====
 .ipynb_checkpoints/

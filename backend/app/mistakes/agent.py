@@ -44,12 +44,40 @@ class MistakeMultiAgent:
     def __init__(self, *, base_url: str | None = None, api_key: str | None = None, app_id: str | None = None, model_name: str | None = None, timeout_seconds: int | None = None, max_retries: int | None = None, env_path: Path | None = None) -> None:
         self.env_path = env_path or DEFAULT_ENV_PATH
         _load_env_file(self.env_path)
-        self.base_url = base_url or os.getenv("MISTAKES_LLM_BASE_URL", DEFAULT_BASE_URL)
-        self.api_key = api_key or os.getenv("VIVO_APP_KEY") or os.getenv("MISTAKES_LLM_API_KEY")
-        self.app_id = app_id or os.getenv("VIVO_APP_ID") or os.getenv("MISTAKES_LLM_APP_ID")
-        self.model_name = model_name or os.getenv("MISTAKES_LLM_MODEL_NAME", DEFAULT_MODEL_NAME)
-        self.timeout_seconds = timeout_seconds or int(os.getenv("MISTAKES_LLM_TIMEOUT_SECONDS", "60"))
-        self.max_retries = max_retries or int(os.getenv("MISTAKES_LLM_MAX_RETRIES", "1"))
+        self.base_url = (
+            base_url
+            or os.getenv("MISTAKES_LLM_BASE_URL")
+            or os.getenv("LLM_BASE_URL")
+            or DEFAULT_BASE_URL
+        )
+        self.api_key = (
+            api_key
+            or os.getenv("VIVO_APP_KEY")
+            or os.getenv("MISTAKES_LLM_API_KEY")
+            or os.getenv("LLM_API_KEY")
+        )
+        self.app_id = (
+            app_id
+            or os.getenv("VIVO_APP_ID")
+            or os.getenv("MISTAKES_LLM_APP_ID")
+            or os.getenv("LLM_APP_ID")
+        )
+        self.model_name = (
+            model_name
+            or os.getenv("MISTAKES_LLM_MODEL_NAME")
+            or os.getenv("LLM_MODEL_NAME")
+            or DEFAULT_MODEL_NAME
+        )
+        self.timeout_seconds = timeout_seconds or int(
+            os.getenv("MISTAKES_LLM_TIMEOUT_SECONDS")
+            or os.getenv("LLM_TIMEOUT_SECONDS")
+            or "60"
+        )
+        self.max_retries = max_retries or int(
+            os.getenv("MISTAKES_LLM_MAX_RETRIES")
+            or os.getenv("LLM_MAX_RETRIES")
+            or "1"
+        )
 
     def generate_recommendation(self, *, report_payload: dict[str, Any], origin_report_id: str, recommendation_type: str) -> MistakeRecommendationData:
         traces: list[MistakeAgentTrace] = []

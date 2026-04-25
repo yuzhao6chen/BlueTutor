@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -39,6 +40,7 @@ import com.bluetutor.android.feature.practice.PracticeRecommendationState
 import com.bluetutor.android.feature.practice.PracticeRedoState
 import com.bluetutor.android.feature.practice.data.MistakeRecommendationOptionResult
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
+import com.bluetutor.android.feature.practice.data.PracticeLocalCache
 import com.bluetutor.android.feature.practice.difficultyColor
 import com.bluetutor.android.feature.practice.difficultyDisplayName
 import com.bluetutor.android.ui.theme.BluetutorGradients
@@ -53,13 +55,23 @@ fun PracticeRecommendationScreen(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var state by remember { mutableStateOf(PracticeRecommendationState()) }
+    var state by remember(context, reportId, recommendationType) {
+        val cachedRecommendation = PracticeLocalCache.readRecommendation(context, reportId, recommendationType)
+        mutableStateOf(
+            PracticeRecommendationState(
+                isLoading = cachedRecommendation == null,
+                recommendation = cachedRecommendation,
+            ),
+        )
+    }
 
     LaunchedEffect(reportId, recommendationType) {
         onBottomBarVisibilityChange(false)
         try {
             val rec = MistakesApiClient.generateRecommendation(reportId, recommendationType = recommendationType)
+            PracticeLocalCache.saveRecommendation(context, reportId, recommendationType, rec)
             state = state.copy(isLoading = false, recommendation = rec)
         } catch (e: Exception) {
             state = state.copy(isLoading = false, error = e.message)
@@ -85,6 +97,7 @@ fun PracticeRecommendationScreen(
                         state = state.copy(isLoading = true, error = null)
                         try {
                             val rec = MistakesApiClient.generateRecommendation(reportId, recommendationType = recommendationType)
+                            PracticeLocalCache.saveRecommendation(context, reportId, recommendationType, rec)
                             state = state.copy(isLoading = false, recommendation = rec)
                         } catch (e: Exception) {
                             state = state.copy(isLoading = false, error = e.message)
@@ -127,8 +140,17 @@ fun PracticeRecommendationPracticeScreen(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var state by remember { mutableStateOf(PracticeRedoState()) }
+    var state by remember(context, recommendationId) {
+        val cachedSession = PracticeLocalCache.readRedoSessionByRecommendationId(context, recommendationId)
+        mutableStateOf(
+            PracticeRedoState(
+                isLoading = cachedSession == null,
+                session = cachedSession,
+            ),
+        )
+    }
     var started by remember { mutableStateOf(false) }
 
     LaunchedEffect(recommendationId) {
@@ -137,6 +159,7 @@ fun PracticeRecommendationPracticeScreen(
             started = true
             try {
                 val session = MistakesApiClient.startRecommendationRedo(recommendationId)
+                PracticeLocalCache.saveRedoSession(context, session)
                 state = state.copy(isLoading = false, session = session)
             } catch (e: Exception) {
                 state = state.copy(isLoading = false, error = e.message)
@@ -160,6 +183,7 @@ fun PracticeRecommendationPracticeScreen(
                         state = state.copy(isLoading = true, error = null)
                         try {
                             val session = MistakesApiClient.startRecommendationRedo(recommendationId)
+                            PracticeLocalCache.saveRedoSession(context, session)
                             state = state.copy(isLoading = false, session = session)
                         } catch (e: Exception) {
                             state = state.copy(isLoading = false, error = e.message)
@@ -194,6 +218,7 @@ fun PracticeRecommendationPracticeScreen(
                                         state.session!!.sessionId,
                                         answer,
                                     )
+                                    PracticeLocalCache.saveRedoSession(context, updated)
                                     state = state.copy(isSubmitting = false, session = updated, showHint = false)
                                 } catch (e: Exception) {
                                     state = state.copy(isSubmitting = false, error = e.message)

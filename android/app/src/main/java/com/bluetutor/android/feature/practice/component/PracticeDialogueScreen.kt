@@ -38,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -51,6 +52,7 @@ import com.bluetutor.android.feature.practice.PracticeDialogueState
 import com.bluetutor.android.feature.practice.data.MistakeDialogueMessageResult
 import com.bluetutor.android.feature.practice.data.MistakeDialogueSessionResult
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
+import com.bluetutor.android.feature.practice.data.PracticeLocalCache
 import com.bluetutor.android.feature.practice.masteryVerdictDisplayName
 import com.bluetutor.android.ui.theme.BluetutorGradients
 import kotlinx.coroutines.launch
@@ -63,13 +65,23 @@ fun PracticeDialogueScreen(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var state by remember { mutableStateOf(PracticeDialogueState()) }
+    var state by remember(context, reportId) {
+        val cachedSession = PracticeLocalCache.readDialogueSessionByReportId(context, reportId)
+        mutableStateOf(
+            PracticeDialogueState(
+                isLoading = cachedSession == null,
+                session = cachedSession,
+            ),
+        )
+    }
 
     LaunchedEffect(reportId) {
         onBottomBarVisibilityChange(false)
         try {
             val session = MistakesApiClient.startDialogueSession(reportId)
+            PracticeLocalCache.saveDialogueSession(context, session)
             state = state.copy(isLoading = false, session = session)
         } catch (e: Exception) {
             state = state.copy(isLoading = false, error = e.message)
@@ -118,6 +130,7 @@ fun PracticeDialogueScreen(
                         state = state.copy(isLoading = true, error = null)
                         try {
                             val session = MistakesApiClient.startDialogueSession(reportId)
+                            PracticeLocalCache.saveDialogueSession(context, session)
                             state = state.copy(isLoading = false, session = session)
                         } catch (e: Exception) {
                             state = state.copy(isLoading = false, error = e.message)
@@ -137,6 +150,7 @@ fun PracticeDialogueScreen(
                                     state.session!!.sessionId,
                                     message,
                                 )
+                                PracticeLocalCache.saveDialogueSession(context, updated)
                                 state = state.copy(isSending = false, session = updated)
                             } catch (e: Exception) {
                                 state = state.copy(isSending = false, error = e.message)
@@ -160,6 +174,7 @@ fun PracticeDialogueSessionScreen(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(PracticeDialogueState()) }
 
@@ -167,10 +182,12 @@ fun PracticeDialogueSessionScreen(
         onBottomBarVisibilityChange(false)
         try {
             val session = MistakesApiClient.advanceDialogueSession(sessionId, "")
+            PracticeLocalCache.saveDialogueSession(context, session)
             state = state.copy(isLoading = false, session = session)
         } catch (e: Exception) {
             try {
                 val session = MistakesApiClient.startDialogueSession(sessionId)
+                PracticeLocalCache.saveDialogueSession(context, session)
                 state = state.copy(isLoading = false, session = session)
             } catch (e2: Exception) {
                 state = state.copy(isLoading = false, error = e2.message)
@@ -203,6 +220,7 @@ fun PracticeDialogueSessionScreen(
                                     state.session!!.sessionId,
                                     message,
                                 )
+                                PracticeLocalCache.saveDialogueSession(context, updated)
                                 state = state.copy(isSending = false, session = updated)
                             } catch (e: Exception) {
                                 state = state.copy(isSending = false, error = e.message)

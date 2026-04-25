@@ -5,7 +5,12 @@ from typing import Any
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-load_dotenv(Path(__file__).with_name(".env"), override=True)
+_GUIDE_DIR = Path(__file__).resolve().parent
+_BACKEND_DIR = _GUIDE_DIR.parents[1]
+
+# 先加载 backend/.env，再允许 guide/.env（若存在）覆盖。
+load_dotenv(_BACKEND_DIR / ".env", override=False)
+load_dotenv(_GUIDE_DIR / ".env", override=True)
 
 _llm_instances: dict[str, Any] = {}
 
@@ -33,7 +38,10 @@ def get_llm(model: str = "qwen-plus" ) -> Any:
     if model not in _llm_instances:
         api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
         if not api_key:
-            raise RuntimeError("DASHSCOPE_API_KEY is missing or empty")
+            # 兼容后端统一配置命名。
+            api_key = os.getenv("LLM_API_KEY", "").strip()
+        if not api_key:
+            raise RuntimeError("DASHSCOPE_API_KEY/LLM_API_KEY is missing or empty")
         _llm_instances[model] = ChatOpenAI(
             api_key=api_key,
             base_url=_DASHSCOPE_BASE_URL,

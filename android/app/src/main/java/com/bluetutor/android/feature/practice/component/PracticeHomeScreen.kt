@@ -36,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -54,6 +55,7 @@ import com.bluetutor.android.feature.practice.data.MistakeHomeSummaryResult
 import com.bluetutor.android.feature.practice.data.MistakeTimelineGroup
 import com.bluetutor.android.feature.practice.data.MistakeTimelineItem
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
+import com.bluetutor.android.feature.practice.data.PracticeLocalCache
 import com.bluetutor.android.feature.practice.weakTopicColors
 import com.bluetutor.android.feature.practice.weakTopicEmojis
 import com.bluetutor.android.ui.theme.BluetutorGradients
@@ -65,13 +67,24 @@ fun PracticeHomeScreen(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var state by remember { mutableStateOf(PracticeHomeState()) }
+    var state by remember(context) {
+        val cachedSummary = PracticeLocalCache.readHomeSummary(context)
+        mutableStateOf(
+            PracticeHomeState(
+                isLoading = cachedSummary == null,
+                homeSummary = cachedSummary,
+                timelineGroups = cachedSummary?.recentTimeline.orEmpty(),
+            ),
+        )
+    }
 
     LaunchedEffect(Unit) {
         onBottomBarVisibilityChange(true)
         try {
             val summary = MistakesApiClient.getHomeSummary()
+            PracticeLocalCache.saveHomeSummary(context, summary)
             state = state.copy(isLoading = false, homeSummary = summary, timelineGroups = summary.recentTimeline)
         } catch (e: Exception) {
             state = state.copy(isLoading = false, error = e.message)
@@ -91,6 +104,7 @@ fun PracticeHomeScreen(
                 scope.launch {
                     try {
                         val summary = MistakesApiClient.getHomeSummary()
+                        PracticeLocalCache.saveHomeSummary(context, summary)
                         state = state.copy(isLoading = false, homeSummary = summary, timelineGroups = summary.recentTimeline)
                     } catch (e: Exception) {
                         state = state.copy(isLoading = false, error = e.message)
@@ -130,7 +144,6 @@ fun PracticeHomeScreen(
                 onTagClick = { tag ->
                     onNavigate(PracticeDestination.Timeline(initialKnowledgeTag = tag))
                 },
-                onSeeAll = { onNavigate(PracticeDestination.Timeline()) },
             )
         }
 
@@ -138,25 +151,6 @@ fun PracticeHomeScreen(
             RecentTimelineSection(
                 groups = state.timelineGroups,
                 onItemClick = { onNavigate(PracticeDestination.Detail(it.reportId)) },
-                onSeeAll = { onNavigate(PracticeDestination.Timeline()) },
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            ActionButton(
-                text = "再做一题 →",
-                isPrimary = true,
-                onClick = { onNavigate(PracticeDestination.Timeline(initialStatus = "pending")) },
-                modifier = Modifier.weight(1f),
-            )
-            ActionButton(
-                text = "错题本",
-                isPrimary = false,
-                onClick = { onNavigate(PracticeDestination.Timeline()) },
-                modifier = Modifier.weight(1f),
             )
         }
     }
@@ -369,7 +363,6 @@ private fun AiConsolidationCard(onClick: () -> Unit) {
 private fun WeakTopicsSection(
     weakTags: List<com.bluetutor.android.feature.practice.data.MistakeWeakTagItem>,
     onTagClick: (String) -> Unit,
-    onSeeAll: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -378,14 +371,14 @@ private fun WeakTopicsSection(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SectionHeader(title = "薄弱知识点", action = "查看全部 →", onAction = onSeeAll)
+        SectionHeader(title = "薄弱知识点")
 
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             weakTags.forEachIndexed { index, tag ->
-                val emoji = weakTopicEmojis.getOrElse(index) { "📚" }
+                val emoji = weakTopicEmojis[tag.tag] ?: "📚"
                 val (bgColor, textColor) = weakTopicColors.getOrElse(index) { Color(0xFFE0F2FE) to Color(0xFF075985) }
                 PracticeWeakTopicCard(
                     item = PracticeWeakTopicUiModel(
@@ -407,7 +400,6 @@ private fun WeakTopicsSection(
 private fun RecentTimelineSection(
     groups: List<MistakeTimelineGroup>,
     onItemClick: (MistakeTimelineItem) -> Unit,
-    onSeeAll: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -416,7 +408,7 @@ private fun RecentTimelineSection(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SectionHeader(title = "最近错题", action = "查看全部 →", onAction = onSeeAll)
+        SectionHeader(title = "最近错题")
 
         groups.forEach { group ->
             if (group.items.isNotEmpty()) {
@@ -492,58 +484,10 @@ private fun TimelineItemRow(
 }
 
 @Composable
-private fun ActionButton(
-    text: String,
-    isPrimary: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .height(52.dp)
-            .shadow(if (isPrimary) 8.dp else 6.dp, RoundedCornerShape(18.dp))
-            .then(
-                if (isPrimary) Modifier.background(
-                    brush = Brush.horizontalGradient(listOf(Color(0xFF7DD3F7), Color(0xFF38ABDA))),
-                    shape = RoundedCornerShape(18.dp),
-                ) else Modifier.background(
-                    color = Color.White,
-                    shape = RoundedCornerShape(18.dp),
-                )
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (isPrimary) Color.White else Color(0xFF1A3550),
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center,
-            )
-            if (!isPrimary) {
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.Rounded.ChevronRight,
-                    contentDescription = null,
-                    tint = Color(0xFF1A3550),
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun SectionHeader(
     title: String,
-    action: String,
-    onAction: () -> Unit = {},
+    action: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -555,12 +499,14 @@ fun SectionHeader(
             style = MaterialTheme.typography.titleMedium,
             color = Color(0xFF1A3550),
         )
-        Text(
-            text = action,
-            style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF38ABD8),
-            modifier = Modifier.clickable(onClick = onAction),
-        )
+        if (!action.isNullOrBlank() && onAction != null) {
+            Text(
+                text = action,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF38ABD8),
+                modifier = Modifier.clickable(onClick = onAction),
+            )
+        }
     }
 }
 

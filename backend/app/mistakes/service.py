@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -54,7 +55,12 @@ from .store import list_dialogue_sessions as _list_stored_dialogue_sessions
 
 
 class MistakeService:
-	def __init__(self, data_dir: Path | None = None, multi_agent: MistakeMultiAgent | None = None) -> None:
+	def __init__(
+		self,
+		data_dir: Path | None = None,
+		multi_agent: MistakeMultiAgent | None = None,
+		persist_runtime_state: bool | None = None,
+	) -> None:
 		self._reports: dict[str, MistakeReportData] = {}
 		self._redo_sessions: dict[str, MistakeRedoSessionData] = {}
 		self._recommendations: dict[str, MistakeRecommendationData] = {}
@@ -62,6 +68,7 @@ class MistakeService:
 		self._dialogue_sessions: dict[str, MistakeDialogueSessionData] = {}
 		self._data_dir = data_dir
 		self._multi_agent = multi_agent or MistakeMultiAgent()
+		self._persist_runtime_state = persist_runtime_state if persist_runtime_state is not None else os.getenv("MISTAKES_PERSIST_RUNTIME_STATE", "false").lower() == "true"
 		self._load_existing_data()
 
 	def ingest_report(self, request: MistakeReportIngestRequest) -> MistakeReportIngestData:
@@ -197,7 +204,8 @@ class MistakeService:
 			user_profile=user_profile_dict,
 		)
 		self._recommendations[rec.recommendation_id] = rec
-		save_recommendation(rec)
+		if self._persist_runtime_state:
+			save_recommendation(rec)
 		return rec
 
 	def start_redo_session(self, request: MistakeRedoSessionRequest) -> MistakeRedoSessionData:
@@ -238,7 +246,8 @@ class MistakeService:
 			updated_at=now,
 		)
 		self._redo_sessions[session.session_id] = session.model_copy(deep=True)
-		save_redo_session(session)
+		if self._persist_runtime_state:
+			save_redo_session(session)
 		return session
 
 	def start_redo_session_from_recommendation(
@@ -295,7 +304,8 @@ class MistakeService:
 			updated_at=now,
 		)
 		self._redo_sessions[session.session_id] = session.model_copy(deep=True)
-		save_redo_session(session)
+		if self._persist_runtime_state:
+			save_redo_session(session)
 		return session
 
 	def submit_recommendation_answer(
@@ -322,6 +332,8 @@ class MistakeService:
 		session = self._redo_sessions.get(session_id)
 		if session is not None:
 			return session
+		if not self._persist_runtime_state:
+			raise KeyError(f"重做会话不存在：{session_id}")
 		stored = load_redo_session(session_id)
 		if stored is None:
 			raise KeyError(f"重做会话不存在：{session_id}")
@@ -331,6 +343,8 @@ class MistakeService:
 	def advance_redo_session(self, session_id: str, request: MistakeRedoSessionTurnRequest) -> MistakeRedoSessionData:
 		session = self._redo_sessions.get(session_id)
 		if session is None:
+			if not self._persist_runtime_state:
+				raise KeyError(f"重做会话不存在：{session_id}")
 			stored = load_redo_session(session_id)
 			if stored is None:
 				raise KeyError(f"重做会话不存在：{session_id}")
@@ -409,7 +423,8 @@ class MistakeService:
 				"updated_at": now,
 			})
 			self._redo_sessions[session_id] = updated
-			save_redo_session(updated)
+			if self._persist_runtime_state:
+				save_redo_session(updated)
 			return updated
 
 		planned = self._multi_agent.plan_redo_turn(
@@ -435,7 +450,8 @@ class MistakeService:
 			"updated_at": now,
 		})
 		self._redo_sessions[session_id] = updated
-		save_redo_session(updated)
+		if self._persist_runtime_state:
+			save_redo_session(updated)
 		return updated
 
 	def update_status(self, report_id: str, request: MistakeReportStatusUpdateRequest) -> MistakeReportData:
@@ -548,6 +564,8 @@ class MistakeService:
 	def _load_existing_data(self) -> None:
 		for report in _list_stored_reports():
 			self._reports[report.report_id] = self._with_solution_metadata(report)
+		if not self._persist_runtime_state:
+			return
 		for session in _list_stored_sessions():
 			self._redo_sessions[session.session_id] = session
 		for rec in _list_stored_recommendations():
@@ -564,6 +582,8 @@ class MistakeService:
 		rec = self._recommendations.get(recommendation_id)
 		if rec is not None:
 			return rec
+		if not self._persist_runtime_state:
+			return None
 		stored = load_recommendation(recommendation_id)
 		if stored is not None:
 			self._recommendations[recommendation_id] = stored
@@ -874,6 +894,8 @@ class MistakeService:
 		profile = self._user_profiles.get(user_id)
 		if profile is not None:
 			return profile
+		if not self._persist_runtime_state:
+			return None
 		stored = load_user_profile(user_id)
 		if stored is not None:
 			self._user_profiles[user_id] = stored
@@ -886,7 +908,8 @@ class MistakeService:
 		reports = self._select_reports(user_id=user_id)
 		profile = self._build_profile_from_reports(user_id, reports)
 		self._user_profiles[user_id] = profile
-		save_user_profile(profile)
+		if self._persist_runtime_state:
+			save_user_profile(profile)
 		return profile
 
 	def _update_user_profile_on_ingest(self, user_id: str, report: MistakeReportData) -> None:
@@ -898,7 +921,8 @@ class MistakeService:
 		else:
 			profile = self._incremental_update_profile(existing, report)
 		self._user_profiles[user_id] = profile
-		save_user_profile(profile)
+		if self._persist_runtime_state:
+			save_user_profile(profile)
 
 	def _build_profile_from_reports(self, user_id: str, reports: list[MistakeReportData]) -> MistakeUserProfileData:
 		total = len(reports)
@@ -1085,13 +1109,16 @@ class MistakeService:
 			updated_at=now,
 		)
 		self._dialogue_sessions[session.session_id] = session.model_copy(deep=True)
-		save_dialogue_session(session)
+		if self._persist_runtime_state:
+			save_dialogue_session(session)
 		return session
 
 	def get_dialogue_session(self, session_id: str) -> MistakeDialogueSessionData:
 		session = self._dialogue_sessions.get(session_id)
 		if session is not None:
 			return session
+		if not self._persist_runtime_state:
+			raise KeyError(f"对话会话不存在：{session_id}")
 		stored = load_dialogue_session(session_id)
 		if stored is None:
 			raise KeyError(f"对话会话不存在：{session_id}")
@@ -1101,6 +1128,8 @@ class MistakeService:
 	def advance_dialogue_session(self, session_id: str, request: MistakeDialogueSessionTurnRequest) -> MistakeDialogueSessionData:
 		session = self._dialogue_sessions.get(session_id)
 		if session is None:
+			if not self._persist_runtime_state:
+				raise KeyError(f"对话会话不存在：{session_id}")
 			stored = load_dialogue_session(session_id)
 			if stored is None:
 				raise KeyError(f"对话会话不存在：{session_id}")
@@ -1174,7 +1203,8 @@ class MistakeService:
 			"updated_at": now,
 		})
 		self._dialogue_sessions[session_id] = updated
-		save_dialogue_session(updated)
+		if self._persist_runtime_state:
+			save_dialogue_session(updated)
 		return updated
 
 

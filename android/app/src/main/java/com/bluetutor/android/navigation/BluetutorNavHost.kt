@@ -15,6 +15,7 @@ fun BluetutorNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
     onPreviewBottomBarVisibilityChange: (Boolean) -> Unit = {},
+    onPracticeBottomBarVisibilityChange: (Boolean) -> Unit = {},
     onProfileBottomBarVisibilityChange: (Boolean) -> Unit = {},
 ) {
     NavHost(
@@ -29,7 +30,7 @@ fun BluetutorNavHost(
             SolveRoute()
         }
         composable(BluetutorDestination.Practice.route) {
-            PracticeRoute()
+            PracticeRoute(onBottomBarVisibilityChange = onPracticeBottomBarVisibilityChange)
         }
         composable(BluetutorDestination.Profile.route) {
             ProfileRoute(onBottomBarVisibilityChange = onProfileBottomBarVisibilityChange)

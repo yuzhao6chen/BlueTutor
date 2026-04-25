@@ -17,14 +17,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,16 +38,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
 import com.bluetutor.android.feature.practice.PracticeDestination
 import com.bluetutor.android.feature.practice.PracticeTimelineState
 import com.bluetutor.android.feature.practice.data.MistakeTimelineGroup
 import com.bluetutor.android.feature.practice.data.MistakeTimelineItem
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
+import com.bluetutor.android.feature.practice.data.PracticeLocalCache
 import com.bluetutor.android.ui.theme.BluetutorGradients
 import kotlinx.coroutines.launch
 
@@ -57,8 +63,8 @@ fun PracticeTimelineScreen(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var state by remember { mutableStateOf(PracticeTimelineState()) }
     var selectedTab by remember {
         mutableIntStateOf(
             when (initialStatus) {
@@ -68,33 +74,48 @@ fun PracticeTimelineScreen(
             },
         )
     }
+    var state by remember(context, initialStatus, initialKnowledgeTag) {
+        val cachedGroups = PracticeLocalCache.readTimeline(
+            context,
+            status = initialStatus,
+            knowledgeTag = initialKnowledgeTag,
+        ).orEmpty()
+        mutableStateOf(
+            PracticeTimelineState(
+                isLoading = cachedGroups.isEmpty(),
+                filterStatus = initialStatus,
+                timelineGroups = cachedGroups,
+            ),
+        )
+    }
     val tabs = listOf("全部", "待巩固", "已巩固")
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(selectedTab, initialKnowledgeTag) {
         onBottomBarVisibilityChange(false)
-        val filter = initialStatus ?: when (selectedTab) {
-            1 -> "pending"
-            2 -> "mastered"
-            else -> null
-        }
-        state = state.copy(isLoading = true, filterStatus = filter)
-        try {
-            val groups = MistakesApiClient.getTimeline(status = filter, knowledgeTag = initialKnowledgeTag)
-            state = state.copy(isLoading = false, timelineGroups = groups)
-        } catch (e: Exception) {
-            state = state.copy(isLoading = false, error = e.message)
-        }
-    }
-
-    LaunchedEffect(selectedTab) {
         val filter = when (selectedTab) {
             1 -> "pending"
             2 -> "mastered"
             else -> null
         }
-        state = state.copy(isLoading = true, filterStatus = filter)
+        val cachedGroups = PracticeLocalCache.readTimeline(
+            context,
+            status = filter,
+            knowledgeTag = initialKnowledgeTag,
+        )
+        state = state.copy(
+            isLoading = cachedGroups.isNullOrEmpty(),
+            filterStatus = filter,
+            timelineGroups = cachedGroups ?: state.timelineGroups,
+            error = null,
+        )
         try {
-            val groups = MistakesApiClient.getTimeline(status = filter)
+            val groups = MistakesApiClient.getTimeline(status = filter, knowledgeTag = initialKnowledgeTag)
+            PracticeLocalCache.saveTimeline(
+                context,
+                status = filter,
+                knowledgeTag = initialKnowledgeTag,
+                groups = groups,
+            )
             state = state.copy(isLoading = false, timelineGroups = groups)
         } catch (e: Exception) {
             state = state.copy(isLoading = false, error = e.message)
@@ -148,7 +169,13 @@ fun PracticeTimelineScreen(
                     scope.launch {
                         state = state.copy(isLoading = true, error = null)
                         try {
-                            val groups = MistakesApiClient.getTimeline(status = state.filterStatus)
+                            val groups = MistakesApiClient.getTimeline(status = state.filterStatus, knowledgeTag = initialKnowledgeTag)
+                            PracticeLocalCache.saveTimeline(
+                                context,
+                                status = state.filterStatus,
+                                knowledgeTag = initialKnowledgeTag,
+                                groups = groups,
+                            )
                             state = state.copy(isLoading = false, timelineGroups = groups)
                         } catch (e: Exception) {
                             state = state.copy(isLoading = false, error = e.message)
@@ -297,43 +324,51 @@ private fun EmptyTimelineScreen(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopBar(
     title: String,
     onBack: (() -> Unit)? = null,
     action: @Composable (() -> Unit)? = null,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (onBack != null) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
-                    tint = Color(0xFF1A3550),
-                )
+    CenterAlignedTopAppBar(
+        expandedHeight = 52.dp,
+        windowInsets = WindowInsets(0, 0, 0, 0),
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        navigationIcon = {
+            if (onBack != null) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ArrowBack,
+                        contentDescription = "返回",
+                        modifier = Modifier.size(18.dp),
+                        tint = Color(0xFF1A3550),
+                    )
+                }
             }
-        } else {
-            Spacer(modifier = Modifier.width(48.dp))
-        }
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = Color(0xFF1A3550),
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f),
-        )
-        if (action != null) {
-            action()
-        } else {
-            Spacer(modifier = Modifier.width(48.dp))
-        }
-    }
+        },
+        actions = {
+            if (action != null) {
+                action()
+            } else {
+                Spacer(modifier = Modifier.width(38.dp))
+            }
+        },
+        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+            containerColor = Color.White,
+        ),
+    )
 }
 
 private suspend fun loadTimeline(

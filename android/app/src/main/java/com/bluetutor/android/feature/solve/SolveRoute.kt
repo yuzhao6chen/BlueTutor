@@ -19,11 +19,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.Text
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -35,18 +43,88 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.bluetutor.android.feature.solve.data.GuideApiClient
 import com.bluetutor.android.feature.solve.component.SolveTeacherIllustration
 import com.bluetutor.android.ui.theme.BluetutorSpacing
+import kotlinx.coroutines.launch
 
 @Composable
 fun SolveRoute(modifier: Modifier = Modifier) {
     val uiState = remember { solveRouteMockUiState() }
-    SolveScreen(uiState = uiState, modifier = modifier)
+    var guideState by remember { mutableStateOf(SolveGuideConversationState()) }
+    val scope = rememberCoroutineScope()
+
+    SolveScreen(
+        uiState = uiState,
+        guideState = guideState,
+        onProblemTextChange = {
+            guideState = guideState.copy(problemText = it, error = null)
+        },
+        onStudentInputChange = {
+            guideState = guideState.copy(studentInput = it, error = null)
+        },
+        onStartGuide = {
+            val problemText = guideState.problemText.trim()
+            if (problemText.isBlank()) {
+                guideState = guideState.copy(error = "请先输入题目")
+            } else {
+                scope.launch {
+                    guideState = guideState.copy(isSubmitting = true, error = null)
+                    try {
+                        val sessionId = GuideApiClient.createSession(problemText)
+                        guideState = guideState.copy(
+                            isSubmitting = false,
+                            sessionId = sessionId,
+                            studentInput = "",
+                            messages = emptyList(),
+                            isSolved = false,
+                        )
+                    } catch (e: Exception) {
+                        guideState = guideState.copy(isSubmitting = false, error = e.message)
+                    }
+                }
+            }
+        },
+        onSendTurn = {
+            val sessionId = guideState.sessionId
+            val studentInput = guideState.studentInput.trim()
+            if (sessionId == null) {
+                guideState = guideState.copy(error = "请先创建解题会话")
+            } else if (studentInput.isBlank()) {
+                guideState = guideState.copy(error = "请先输入你的思路")
+            } else {
+                scope.launch {
+                    val pendingStudentMessage = SolveChatMessage(role = "student", content = studentInput)
+                    guideState = guideState.copy(isSubmitting = true, error = null)
+                    try {
+                        val turn = GuideApiClient.runTurn(sessionId, studentInput)
+                        guideState = guideState.copy(
+                            isSubmitting = false,
+                            studentInput = "",
+                            messages = guideState.messages + pendingStudentMessage + SolveChatMessage(
+                                role = "tutor",
+                                content = turn.question,
+                            ),
+                            isSolved = turn.isSolved,
+                        )
+                    } catch (e: Exception) {
+                        guideState = guideState.copy(isSubmitting = false, error = e.message)
+                    }
+                }
+            }
+        },
+        modifier = modifier,
+    )
 }
 
 @Composable
 private fun SolveScreen(
     uiState: SolveRouteUiState,
+    guideState: SolveGuideConversationState,
+    onProblemTextChange: (String) -> Unit,
+    onStudentInputChange: (String) -> Unit,
+    onStartGuide: () -> Unit,
+    onSendTurn: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -75,6 +153,14 @@ private fun SolveScreen(
             uiState.entries.forEach { entry ->
                 SolveEntryCard(entry = entry)
             }
+
+            GuideTrialSection(
+                state = guideState,
+                onProblemTextChange = onProblemTextChange,
+                onStudentInputChange = onStudentInputChange,
+                onStartGuide = onStartGuide,
+                onSendTurn = onSendTurn,
+            )
         }
 
         Column(
@@ -343,6 +429,169 @@ private fun SolveTipRow(tip: SolveTipUiModel) {
     }
 }
 
+@Composable
+private fun GuideTrialSection(
+    state: SolveGuideConversationState,
+    onProblemTextChange: (String) -> Unit,
+    onStudentInputChange: (String) -> Unit,
+    onStartGuide: () -> Unit,
+    onSendTurn: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(28.dp))
+            .background(Color.White, RoundedCornerShape(28.dp))
+            .padding(horizontal = 18.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(
+            text = "已接通体验版",
+            style = MaterialTheme.typography.labelLarge,
+            color = Color(0xFF38ABDA),
+            fontWeight = FontWeight.ExtraBold,
+        )
+
+        Text(
+            text = if (state.sessionId == null) {
+                "先手动输入一道题，创建 Guide 会话后再发送你的思路。"
+            } else {
+                "会话已创建，你可以继续输入自己的思路，让 AI 老师顺着你的想法引导。"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF4B6578),
+        )
+
+        if (state.sessionId != null) {
+            Text(
+                text = "会话 ID：${state.sessionId.take(8)}...",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF7A96A8),
+            )
+        }
+
+        OutlinedTextField(
+            value = state.problemText,
+            onValueChange = onProblemTextChange,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = state.sessionId == null && !state.isSubmitting,
+            label = { Text("题目") },
+            placeholder = { Text("例如：小明有12个苹果，吃了3个，还剩几个？") },
+            minLines = 3,
+            shape = RoundedCornerShape(18.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF38ABDA),
+                unfocusedBorderColor = Color(0xFFD7E8F2),
+            ),
+        )
+
+        if (state.sessionId == null) {
+            Button(
+                onClick = onStartGuide,
+                enabled = !state.isSubmitting,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (state.isSubmitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White,
+                    )
+                } else {
+                    Text("开始引导")
+                }
+            }
+        } else {
+            OutlinedTextField(
+                value = state.studentInput,
+                onValueChange = onStudentInputChange,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !state.isSubmitting && !state.isSolved,
+                label = { Text("我的思路") },
+                placeholder = { Text("例如：我先想到 12 减 3") },
+                minLines = 2,
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF38ABDA),
+                    unfocusedBorderColor = Color(0xFFD7E8F2),
+                ),
+            )
+
+            Button(
+                onClick = onSendTurn,
+                enabled = !state.isSubmitting && !state.isSolved,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (state.isSubmitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White,
+                    )
+                } else {
+                    Text(if (state.isSolved) "已完成本题" else "发送思路")
+                }
+            }
+        }
+
+        if (state.error != null) {
+            Text(
+                text = state.error,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFB42318),
+            )
+        }
+
+        if (state.messages.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                state.messages.forEach { message ->
+                    SolveMessageBubble(message = message)
+                }
+            }
+        }
+
+        if (state.isSolved) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFDDF7E5), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text = "当前题目已被判定为已解决，可以继续补做报告/题解接线。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF166534),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SolveMessageBubble(message: SolveChatMessage) {
+    val isStudent = message.role == "student"
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (isStudent) Alignment.End else Alignment.Start,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(280.dp)
+                .background(
+                    if (isStudent) Color(0xFFDDF4FF) else Color(0xFFF3F8FB),
+                    RoundedCornerShape(18.dp),
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            Text(
+                text = message.content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isStudent) Color(0xFF0B4F70) else Color(0xFF2B465A),
+            )
+        }
+    }
+}
+
 private data class SolveRouteUiState(
     val entries: List<SolveEntryUiModel>,
     val guides: List<SolveGuideUiModel>,
@@ -371,6 +620,21 @@ private data class SolveGuideUiModel(
 private data class SolveTipUiModel(
     val emoji: String,
     val text: String,
+)
+
+private data class SolveGuideConversationState(
+    val problemText: String = "",
+    val studentInput: String = "",
+    val sessionId: String? = null,
+    val messages: List<SolveChatMessage> = emptyList(),
+    val isSubmitting: Boolean = false,
+    val isSolved: Boolean = false,
+    val error: String? = null,
+)
+
+private data class SolveChatMessage(
+    val role: String,
+    val content: String,
 )
 
 private fun solveRouteMockUiState(): SolveRouteUiState = SolveRouteUiState(
