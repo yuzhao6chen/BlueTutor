@@ -1,5 +1,12 @@
 package com.bluetutor.android.feature.solve
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
+import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,29 +41,176 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.core.content.FileProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.bluetutor.android.feature.solve.data.GuideApiClient
 import com.bluetutor.android.feature.solve.component.SolveTeacherIllustration
+import com.bluetutor.android.feature.solve.data.SolveOcrApiClient
 import com.bluetutor.android.ui.theme.BluetutorSpacing
+import com.canhub.cropper.CropImage
+import com.canhub.cropper.CropImageContract
+import com.canhub.cropper.CropImageContractOptions
+import com.canhub.cropper.CropImageOptions
+import com.canhub.cropper.CropImageView
 import kotlinx.coroutines.launch
+import java.io.File
 
+@Suppress("DEPRECATION")
 @Composable
 fun SolveRoute(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val uiState = remember { solveRouteMockUiState() }
     var guideState by remember { mutableStateOf(SolveGuideConversationState()) }
+    var pendingCaptureUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingEditorImageType by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    fun applyRecognizedText(questionText: String) {
+        if (questionText.isBlank()) {
+            guideState = guideState.copy(
+                isRecognizingImage = false,
+                error = "图片识别结果为空，请重试或手动输入题目",
+            )
+            return
+        }
+        guideState = guideState.copy(
+            problemText = questionText,
+            studentInput = "",
+            sessionId = null,
+            messages = emptyList(),
+            isSubmitting = false,
+            isSolved = false,
+            isRecognizingImage = false,
+            error = null,
+        )
+    }
+
+    fun recognizeImageToProblemText(imageBase64: String, imageType: String) {
+        scope.launch {
+            guideState = guideState.copy(isRecognizingImage = true, error = null)
+            try {
+                val result = SolveOcrApiClient.recognizeQuestionText(
+                    imageBase64 = imageBase64,
+                    imageType = imageType,
+                )
+                applyRecognizedText(result.questionText)
+            } catch (e: Exception) {
+                guideState = guideState.copy(
+                    isRecognizingImage = false,
+                    error = e.message ?: "图片识别失败，请稍后重试",
+                )
+            }
+        }
+    }
+
+    val editorLauncher = rememberLauncherForActivityResult(
+        contract = CropImageContract(),
+    ) { result ->
+        when {
+            result.isSuccessful -> {
+                val outputUri = result.uriContent
+                val imageType = pendingEditorImageType ?: "screenshot"
+                pendingEditorImageType = null
+                if (outputUri == null) {
+                    guideState = guideState.copy(error = "编辑结果为空，请重试")
+                    return@rememberLauncherForActivityResult
+                }
+                val base64 = readImageBase64FromUri(context, outputUri)
+                if (base64 == null) {
+                    guideState = guideState.copy(error = "读取编辑后图片失败，请重试")
+                    return@rememberLauncherForActivityResult
+                }
+                recognizeImageToProblemText(base64, imageType)
+            }
+            result == CropImage.CancelledResult -> {
+                pendingEditorImageType = null
+            }
+            else -> {
+                pendingEditorImageType = null
+                val message = result.error?.message ?: "图片编辑失败，请重试"
+                guideState = guideState.copy(error = message)
+            }
+        }
+    }
+
+    fun launchFullScreenEditor(sourceUri: Uri, imageType: String) {
+        val isScreenshot = imageType == "screenshot"
+        val outputUri = createTempImageUri(
+            context = context,
+            prefix = "solve_cropped",
+            suffix = if (isScreenshot) ".png" else ".jpg",
+        )
+        if (outputUri == null) {
+            guideState = guideState.copy(error = "无法创建编辑临时文件，请重试")
+            return
+        }
+
+        pendingEditorImageType = imageType
+        editorLauncher.launch(
+            CropImageContractOptions(
+                uri = sourceUri,
+                cropImageOptions = CropImageOptions(
+                    customOutputUri = outputUri,
+                    outputCompressFormat = if (isScreenshot) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG,
+                    outputCompressQuality = 100,
+                    guidelines = CropImageView.Guidelines.ON_TOUCH,
+                    allowRotation = true,
+                    allowCounterRotation = true,
+                    allowFlipping = false,
+                    showCropOverlay = true,
+                    fixAspectRatio = false,
+                    activityTitle = "编辑题目图片",
+                    cropMenuCropButtonTitle = "完成",
+                    activityMenuIconColor = android.graphics.Color.parseColor("#0B4F70"),
+                ),
+            ),
+        )
+    }
+
+    val albumLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri ->
+        val selectedUri = uri ?: return@rememberLauncherForActivityResult
+        launchFullScreenEditor(selectedUri, "screenshot")
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture(),
+    ) { success ->
+        val capturedUri = pendingCaptureUri
+        pendingCaptureUri = null
+        if (!success || capturedUri == null) {
+            guideState = guideState.copy(error = "拍照失败，请重试")
+            return@rememberLauncherForActivityResult
+        }
+        launchFullScreenEditor(capturedUri, "photo")
+    }
+
+    fun startTakePhotoFlow() {
+        val outputUri = createTempImageUri(context, "solve_capture", ".jpg")
+        if (outputUri == null) {
+            guideState = guideState.copy(error = "无法创建拍照文件，请重试")
+            return
+        }
+        pendingCaptureUri = outputUri
+        cameraLauncher.launch(outputUri)
+    }
 
     SolveScreen(
         uiState = uiState,
         guideState = guideState,
+        onTakePhoto = ::startTakePhotoFlow,
+        onPickFromAlbum = { albumLauncher.launch("image/*") },
+        onManualInput = { guideState = guideState.copy(error = null) },
         onProblemTextChange = {
             guideState = guideState.copy(problemText = it, error = null)
         },
@@ -121,6 +275,9 @@ fun SolveRoute(modifier: Modifier = Modifier) {
 private fun SolveScreen(
     uiState: SolveRouteUiState,
     guideState: SolveGuideConversationState,
+    onTakePhoto: () -> Unit,
+    onPickFromAlbum: () -> Unit,
+    onManualInput: () -> Unit,
     onProblemTextChange: (String) -> Unit,
     onStudentInputChange: (String) -> Unit,
     onStartGuide: () -> Unit,
@@ -151,7 +308,16 @@ private fun SolveScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             uiState.entries.forEach { entry ->
-                SolveEntryCard(entry = entry)
+                SolveEntryCard(
+                    entry = entry,
+                    onClick = {
+                        when (entry.action) {
+                            SolveEntryAction.Camera -> onTakePhoto()
+                            SolveEntryAction.Album -> onPickFromAlbum()
+                            SolveEntryAction.Manual -> onManualInput()
+                        }
+                    },
+                )
             }
 
             GuideTrialSection(
@@ -311,6 +477,7 @@ private fun SolveHeroSection() {
 @Composable
 private fun SolveEntryCard(
     entry: SolveEntryUiModel,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -319,6 +486,7 @@ private fun SolveEntryCard(
             .height(108.dp)
             .shadow(6.dp, RoundedCornerShape(28.dp))
             .background(entry.background, RoundedCornerShape(28.dp))
+            .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -470,11 +638,30 @@ private fun GuideTrialSection(
             )
         }
 
+        if (state.isRecognizingImage) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = Color(0xFF38ABDA),
+                )
+                Text(
+                    text = "正在识别图片中的题目...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF4B6578),
+                )
+            }
+        }
+
         OutlinedTextField(
             value = state.problemText,
             onValueChange = onProblemTextChange,
             modifier = Modifier.fillMaxWidth(),
-            enabled = state.sessionId == null && !state.isSubmitting,
+            enabled = state.sessionId == null && !state.isSubmitting && !state.isRecognizingImage,
             label = { Text("题目") },
             placeholder = { Text("例如：小明有12个苹果，吃了3个，还剩几个？") },
             minLines = 3,
@@ -488,7 +675,7 @@ private fun GuideTrialSection(
         if (state.sessionId == null) {
             Button(
                 onClick = onStartGuide,
-                enabled = !state.isSubmitting,
+                enabled = !state.isSubmitting && !state.isRecognizingImage,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.isSubmitting) {
@@ -506,7 +693,7 @@ private fun GuideTrialSection(
                 value = state.studentInput,
                 onValueChange = onStudentInputChange,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isSubmitting && !state.isSolved,
+                enabled = !state.isSubmitting && !state.isSolved && !state.isRecognizingImage,
                 label = { Text("我的思路") },
                 placeholder = { Text("例如：我先想到 12 减 3") },
                 minLines = 2,
@@ -519,7 +706,7 @@ private fun GuideTrialSection(
 
             Button(
                 onClick = onSendTurn,
-                enabled = !state.isSubmitting && !state.isSolved,
+                enabled = !state.isSubmitting && !state.isSolved && !state.isRecognizingImage,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.isSubmitting) {
@@ -599,6 +786,7 @@ private data class SolveRouteUiState(
 )
 
 private data class SolveEntryUiModel(
+    val action: SolveEntryAction,
     val title: String,
     val description: String,
     val icon: ImageVector,
@@ -611,6 +799,12 @@ private data class SolveEntryUiModel(
     val descriptionColor: Color,
     val highlightEmoji: String? = null,
 )
+
+private enum class SolveEntryAction {
+    Camera,
+    Album,
+    Manual,
+}
 
 private data class SolveGuideUiModel(
     val emoji: String,
@@ -628,6 +822,7 @@ private data class SolveGuideConversationState(
     val sessionId: String? = null,
     val messages: List<SolveChatMessage> = emptyList(),
     val isSubmitting: Boolean = false,
+    val isRecognizingImage: Boolean = false,
     val isSolved: Boolean = false,
     val error: String? = null,
 )
@@ -640,6 +835,7 @@ private data class SolveChatMessage(
 private fun solveRouteMockUiState(): SolveRouteUiState = SolveRouteUiState(
     entries = listOf(
         SolveEntryUiModel(
+            action = SolveEntryAction.Camera,
             title = "拍照上传",
             description = "拍清楚题目，我带你一步步想 💬",
             icon = Icons.Rounded.PhotoCamera,
@@ -655,6 +851,7 @@ private fun solveRouteMockUiState(): SolveRouteUiState = SolveRouteUiState(
             highlightEmoji = "⭐",
         ),
         SolveEntryUiModel(
+            action = SolveEntryAction.Album,
             title = "从相册导入",
             description = "选一张题目图片",
             icon = Icons.Rounded.PhotoLibrary,
@@ -669,6 +866,7 @@ private fun solveRouteMockUiState(): SolveRouteUiState = SolveRouteUiState(
             descriptionColor = Color(0xFF7A96A8),
         ),
         SolveEntryUiModel(
+            action = SolveEntryAction.Manual,
             title = "手动输入题目",
             description = "自己打出来也行 ✏️",
             icon = Icons.Rounded.EditNote,
@@ -693,3 +891,28 @@ private fun solveRouteMockUiState(): SolveRouteUiState = SolveRouteUiState(
         SolveTipUiModel("🧩", "做完还能推荐相似题，帮你举一反三"),
     ),
 )
+
+private fun readImageBase64FromUri(context: Context, uri: Uri): String? {
+    return runCatching {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            val bytes = input.readBytes()
+            if (bytes.isEmpty()) {
+                null
+            } else {
+                Base64.encodeToString(bytes, Base64.NO_WRAP)
+            }
+        }
+    }.getOrNull()
+}
+
+private fun createTempImageUri(context: Context, prefix: String, suffix: String): Uri? {
+    return runCatching {
+        val cacheDir = File(context.cacheDir, "solve-images").apply { mkdirs() }
+        val imageFile = File.createTempFile(prefix, suffix, cacheDir)
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            imageFile,
+        )
+    }.getOrNull()
+}

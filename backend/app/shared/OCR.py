@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -27,6 +29,9 @@ OCR_PROMPT = (
     "4. 如果图片中有多道题，只提取最主要/最完整的一道。\n"
     "5. 如果图片模糊无法识别，question_text 返回空字符串。\n"
     "6. 不要补全、不要推断、不要改变原题文字。\n\n"
+    "7. 如果图片不是数学题（例如风景、人像、聊天截图等），question_text 必须返回空字符串。\n"
+    "8. 如果题目方向异常、倒置或侧转导致无法可靠逐字识别，question_text 必须返回空字符串。\n"
+    "9. 严禁根据常见题型进行猜测或编造题目。\n\n"
     "输出格式（严格）：\n"
     '{\"question_text\": \"题目文字\"}'
 )
@@ -45,15 +50,41 @@ def _load_env_file(env_path: Path) -> None:
         os.environ.setdefault(key, value)
 
 
-def _normalize_base64(image_base64: str) -> str:
+def _guess_image_mime(decoded_bytes: bytes) -> str | None:
+    # Common image signatures used to avoid hard-coding jpeg for all uploads.
+    if decoded_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if decoded_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if decoded_bytes.startswith(b"GIF87a") or decoded_bytes.startswith(b"GIF89a"):
+        return "image/gif"
+    if decoded_bytes.startswith(b"RIFF") and decoded_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _normalize_base64(image_base64: str, image_type: str = "photo") -> str:
     """
     统一处理 base64 格式：
-    Android 端传来的可能带 data:image/jpeg;base64, 前缀，也可能是纯 base64。
-    视觉模型需要带 data: 前缀的完整 URL。
+    Android 端传来的可能带 data:*;base64, 前缀，也可能是纯 base64。
+    对纯 base64 会尽量按文件签名推断真实 MIME；推断失败时再按 image_type 回退。
     """
     if image_base64.startswith("data:"):
         return image_base64
-    return f"data:image/jpeg;base64,{image_base64}"
+
+    compact_base64 = re.sub(r"\s+", "", image_base64)
+    inferred_mime: str | None = None
+    try:
+        padded = compact_base64 + ("=" * (-len(compact_base64) % 4))
+        decoded = base64.b64decode(padded, validate=False)
+        inferred_mime = _guess_image_mime(decoded)
+    except (binascii.Error, ValueError):
+        inferred_mime = None
+
+    if not inferred_mime:
+        inferred_mime = "image/png" if image_type == "screenshot" else "image/jpeg"
+
+    return f"data:{inferred_mime};base64,{compact_base64}"
 
 
 class OCRAgent:
@@ -84,7 +115,7 @@ class OCRAgent:
         返回：{"image_id": "img_xxx", "question_text": "..."}
         """
         image_id = f"img_{uuid.uuid4().hex[:8]}"
-        image_url = _normalize_base64(image_base64)
+        image_url = _normalize_base64(image_base64, image_type)
 
         raw_content = self._send_vision_request(image_url)
         question_text = self._parse_question_text(raw_content)
@@ -114,7 +145,8 @@ class OCRAgent:
                     ],
                 }
             ],
-            "temperature": 0.1,
+            "temperature": 0,
+            "max_tokens": 220,
             "stream": False,
         }
 
@@ -139,12 +171,22 @@ class OCRAgent:
 
         response_json = json.loads(body)
         try:
-            return response_json["choices"][0]["message"]["content"]
+            content = response_json["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise RuntimeError(f"OCR API 响应结构异常: {body}") from exc
 
-    def _parse_question_text(self, raw_content: str) -> str:
-        content = raw_content.strip()
+        if isinstance(content, list):
+            text_parts = [
+                item.get("text", "")
+                for item in content
+                if isinstance(item, dict) and item.get("type") == "text"
+            ]
+            return "\n".join(part for part in text_parts if part).strip()
+
+        return str(content)
+
+    def _parse_question_text(self, raw_content: Any) -> str:
+        content = str(raw_content).strip()
 
         # 去掉可能的 markdown 代码块包裹
         if content.startswith("```"):
