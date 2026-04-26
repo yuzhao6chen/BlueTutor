@@ -1,6 +1,7 @@
 package com.bluetutor.android.feature.practice.data
 
 import android.os.Build
+import com.bluetutor.android.feature.solve.data.GuideReportChainItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -232,6 +233,11 @@ data class MistakePlanItemResult(
     val reason: String,
 )
 
+data class MistakeReportIngestResult(
+    val reportId: String,
+    val reportTitle: String,
+)
+
 object MistakesApiClient {
     private const val emulatorBaseUrl = "http://10.0.2.2:8000"
     private const val lanBaseUrl = "http://10.1.2.120:8000"
@@ -413,6 +419,73 @@ object MistakesApiClient {
         val data = root.optJSONObject("data")
             ?: throw MistakesApiException("advance dialogue 接口返回缺少 data 字段")
         parseDialogueSession(data)
+    }
+
+    suspend fun ingestGuideReport(
+        sourceSessionId: String,
+        rawProblem: String,
+        knownConditions: List<String>,
+        goal: String,
+        answer: String,
+        knowledgeTags: List<String>,
+        thinkingChain: List<GuideReportChainItem>,
+        errorProfileMarkdown: String,
+        independenceMarkdown: String,
+        solution: String?,
+        reportTitle: String? = null,
+        userId: String = demoUserId,
+    ): MistakeReportIngestResult = withContext(Dispatchers.IO) {
+        val payload = JSONObject()
+            .put("user_id", userId)
+            .put("source_session_id", sourceSessionId)
+            .put(
+                "report",
+                JSONObject()
+                    .put(
+                        "problem",
+                        JSONObject()
+                            .put("raw_problem", rawProblem)
+                            .put("known_conditions", JSONArray(knownConditions))
+                            .put("goal", goal)
+                            .put("answer", answer),
+                    )
+                    .put("knowledge_tags", JSONArray(knowledgeTags))
+                    .put(
+                        "thinking_chain",
+                        JSONArray().apply {
+                            thinkingChain.forEach { item ->
+                                put(
+                                    JSONObject()
+                                        .put("node_id", item.nodeId)
+                                        .put("content", item.content)
+                                        .put("status", item.status.ifBlank { "unknown" })
+                                        .put("parent_id", item.parentId)
+                                        .put("error_history", JSONArray(item.errorHistory)),
+                                )
+                            }
+                        },
+                    )
+                    .put(
+                        "error_profile",
+                        buildErrorProfileArray(errorProfileMarkdown),
+                    )
+                    .put(
+                        "independence_evaluation",
+                        JSONObject()
+                            .put("level", extractIndependenceLevel(independenceMarkdown))
+                            .put("detail", independenceMarkdown.trim()),
+                    )
+                    .put("solution", solution),
+            )
+        reportTitle?.takeIf { it.isNotBlank() }?.let { payload.put("report_title", it) }
+
+        val root = postJson("/api/mistakes/report/ingest", payload)
+        val data = root.optJSONObject("data")
+            ?: throw MistakesApiException("错题入库接口返回缺少 data 字段")
+        MistakeReportIngestResult(
+            reportId = data.optString("report_id"),
+            reportTitle = data.optString("report_title"),
+        )
     }
 
     private fun getJson(path: String): JSONObject {
@@ -872,5 +945,31 @@ object MistakesApiClient {
             items = items,
             count = data.optInt("count"),
         )
+    }
+
+    private fun buildErrorProfileArray(markdown: String): JSONArray {
+        val lines = markdown
+            .split('\n')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .take(6)
+
+        return JSONArray().apply {
+            lines.forEach { line ->
+                val normalized = line.removePrefix("- ").removePrefix("• ").trim()
+                val errorType = normalized.substringBefore('：', missingDelimiterValue = "讲题误区").ifBlank { "讲题误区" }
+                val detail = normalized.substringAfter('：', missingDelimiterValue = normalized).trim()
+                put(
+                    JSONObject()
+                        .put("error_type", errorType)
+                        .put("detail", detail),
+                )
+            }
+        }
+    }
+
+    private fun extractIndependenceLevel(markdown: String): String {
+        val regex = Regex("level[:：]\\s*([^\\n]+)", RegexOption.IGNORE_CASE)
+        return regex.find(markdown)?.groupValues?.getOrNull(1)?.trim().orEmpty()
     }
 }

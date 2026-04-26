@@ -669,16 +669,18 @@ private fun PreviewHomeScreen(
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(BluetutorSpacing.md),
-        ) {
-            uiState.quickEntries.forEach { entry ->
-                PreviewQuickEntryCard(
-                    entry = entry,
-                    onClick = {},
-                    modifier = Modifier.weight(1f),
-                )
+        if (uiState.quickEntries.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(BluetutorSpacing.md),
+            ) {
+                uiState.quickEntries.forEach { entry ->
+                    PreviewQuickEntryCard(
+                        entry = entry,
+                        onClick = {},
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
 

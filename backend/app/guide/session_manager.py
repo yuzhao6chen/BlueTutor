@@ -194,7 +194,12 @@ def get_session_detail(session_id: str) -> dict:
     return {
         "session_id": session_id,
         "raw_problem": state.raw_problem,
+        "parsed_problem": state.parsed_problem,
         "dialogue_history": state.dialogue_history,
+        "current_stuck_node_id": state.current_stuck_node_id,
+        "stuck_count": state.stuck_count,
+        "last_updated_node_id": state.last_updated_node_id,
+        "is_solved": state.is_solved,
     }
 
 

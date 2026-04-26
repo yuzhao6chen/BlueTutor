@@ -184,10 +184,7 @@ fun previewMockUiState(
         weeklyGoalCurrent = 3,
         weeklyGoalTarget = 5,
         quickTopics = quickTopics,
-        quickEntries = listOf(
-            PreviewQuickEntryUiModel(1, "📷", "拍照提问", "一步步引导你想", PreviewQuickEntryTone.Sky),
-            PreviewQuickEntryUiModel(2, "📚", "选知识点", "系统性预习", PreviewQuickEntryTone.Warm),
-        ),
+        quickEntries = emptyList(),
         recommendedLessons = recommendedLessons,
         uploadCard = uploadCard,
     )
