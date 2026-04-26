@@ -11,8 +11,12 @@ from .schema import (
 	KnowledgePointItem,
 	PreviewChatData,
 	PreviewChatRequest,
+	PreviewDocumentHandoutData,
+	PreviewGeneratedHandoutData,
+	PreviewHandoutBlockItem,
 	PreviewKnowledgeData,
 	PreviewKnowledgeRequest,
+	PreviewUploadHandoutRequest,
 )
 
 
@@ -58,6 +62,77 @@ class PreviewService:
 				"content_text": content_text,
 				"summary": data.summary,
 				"knowledge_points": [item.model_dump() for item in data.knowledge_points],
+			},
+		)
+		return data
+
+	def build_document_handout(
+		self,
+		request: PreviewUploadHandoutRequest,
+		*,
+		file_id: str,
+		file_extension: str,
+		parse_cache_hit: bool,
+	) -> PreviewDocumentHandoutData:
+		parsed_markdown = self._validate_text(request.parsed_markdown, field_name="parsed_markdown")
+		parsed_plain_text = self._validate_text(request.parsed_plain_text, field_name="parsed_plain_text")
+		cache_key = self._build_document_handout_cache_key(
+			file_name=request.file_name,
+			parsed_markdown=parsed_markdown,
+			parsed_plain_text=parsed_plain_text,
+		)
+		cached_payload = self._load_cached_document_handout(cache_key)
+		cache_hit = cached_payload is not None
+
+		if cached_payload is None:
+			knowledge_data = self.get_knowledge_points(
+				PreviewKnowledgeRequest(
+					user_id=request.user_id,
+					content_text=parsed_plain_text,
+					source_type="document_upload",
+					topic_title=request.file_name,
+				),
+			)
+			handout_raw = self.agent.generate_handout(
+				parsed_markdown=parsed_markdown,
+				parsed_plain_text=parsed_plain_text,
+				file_name=request.file_name,
+			)
+			handout = self._build_generated_handout(handout_raw)
+			cached_payload = {
+				"summary": knowledge_data.summary,
+				"knowledge_points": [item.model_dump() for item in knowledge_data.knowledge_points],
+				"handout": handout.model_dump(),
+			}
+			self._save_cached_document_handout(cache_key, cached_payload)
+
+		data = PreviewDocumentHandoutData(
+			file_id=file_id,
+			file_name=request.file_name,
+			file_extension=file_extension,
+			status="success",
+			summary=str(cached_payload.get("summary") or "").strip(),
+			knowledge_points=[
+				KnowledgePointItem.model_validate(item)
+				for item in cached_payload.get("knowledge_points", [])
+			],
+			handout=PreviewGeneratedHandoutData.model_validate(cached_payload.get("handout") or {}),
+			original_markdown=parsed_markdown,
+			original_plain_text=parsed_plain_text,
+			cache_hit=parse_cache_hit or cache_hit,
+		)
+
+		self._log_preview_interaction(
+			file_name="document_handouts.jsonl",
+			payload={
+				"user_id": request.user_id,
+				"file_id": file_id,
+				"file_name": request.file_name,
+				"file_extension": file_extension,
+				"cache_hit": data.cache_hit,
+				"summary": data.summary,
+				"knowledge_points": [item.model_dump() for item in data.knowledge_points],
+				"handout_title": data.handout.article_title,
 			},
 		)
 		return data
@@ -194,6 +269,54 @@ class PreviewService:
 
 		return PreviewChatData(reply=reply, follow_up_questions=cleaned_questions[:3])
 
+	def _build_generated_handout(self, raw_result: dict[str, Any]) -> PreviewGeneratedHandoutData:
+		article_title = self._coerce_string(raw_result.get("article_title"), default="预习讲义")
+		introduction = self._coerce_string(raw_result.get("introduction"), default="这份讲义已经整理完成，可以从下面的结构开始预习。")
+		blocks_raw = raw_result.get("blocks")
+		blocks = self._build_handout_blocks(blocks_raw)
+		if not blocks:
+			blocks = [
+				PreviewHandoutBlockItem(
+					id="block_001",
+					type="paragraph",
+					text=self._coerce_string(raw_result.get("introduction"), default="请结合原始文档内容开始预习。"),
+				)
+			]
+		return PreviewGeneratedHandoutData(
+			article_title=article_title,
+			article_subtitle=self._coerce_string(raw_result.get("article_subtitle"), default="AI 已根据上传文档整理讲义结构"),
+			introduction=introduction,
+			blocks=blocks,
+			footer_prompt=self._coerce_string(raw_result.get("footer_prompt"), default="如果有不理解的段落，可以进入 AI 对话继续追问。"),
+		)
+
+	def _build_handout_blocks(self, raw_blocks: Any) -> list[PreviewHandoutBlockItem]:
+		if not isinstance(raw_blocks, list):
+			return []
+
+		valid_types = {"section_heading", "paragraph", "formula", "thinking_prompt", "note"}
+		blocks: list[PreviewHandoutBlockItem] = []
+		for index, raw_block in enumerate(raw_blocks, start=1):
+			if not isinstance(raw_block, dict):
+				continue
+			text = self._coerce_string(raw_block.get("text"), default="")
+			if not text:
+				continue
+			block_type = self._coerce_string(raw_block.get("type"), default="paragraph").lower()
+			if block_type not in valid_types:
+				block_type = "paragraph"
+			blocks.append(
+				PreviewHandoutBlockItem(
+					id=self._coerce_string(raw_block.get("id"), default=f"block_{index:03d}"),
+					type=block_type,
+					title=self._coerce_string(raw_block.get("title"), default=""),
+					text=text,
+					supporting_text=self._coerce_string(raw_block.get("supporting_text"), default=""),
+					section_title=self._coerce_string(raw_block.get("section_title"), default=""),
+				)
+			)
+		return blocks
+
 	def _build_knowledge_point_id(self, index: int) -> str:
 		return f"kp_{index:03d}"
 
@@ -204,6 +327,22 @@ class PreviewService:
 			"topic_id": request.topic_id,
 			"topic_title": request.topic_title,
 			"content_text": content_text,
+		}
+		serialized_payload = json.dumps(cache_payload, ensure_ascii=False, sort_keys=True)
+		return hashlib.sha256(serialized_payload.encode("utf-8")).hexdigest()
+
+	def _build_document_handout_cache_key(
+		self,
+		*,
+		file_name: str,
+		parsed_markdown: str,
+		parsed_plain_text: str,
+	) -> str:
+		cache_payload = {
+			"model_name": getattr(self.agent, "model_name", ""),
+			"file_name": file_name,
+			"parsed_markdown": parsed_markdown,
+			"parsed_plain_text": parsed_plain_text,
 		}
 		serialized_payload = json.dumps(cache_payload, ensure_ascii=False, sort_keys=True)
 		return hashlib.sha256(serialized_payload.encode("utf-8")).hexdigest()
@@ -224,6 +363,23 @@ class PreviewService:
 		cache_path = self.cache_dir / f"{cache_key}.json"
 		try:
 			cache_path.write_text(data.model_dump_json(indent=2), encoding="utf-8")
+		except OSError:
+			return
+
+	def _load_cached_document_handout(self, cache_key: str) -> dict[str, Any] | None:
+		cache_path = self.cache_dir / f"document_{cache_key}.json"
+		if not cache_path.exists():
+			return None
+		try:
+			return json.loads(cache_path.read_text(encoding="utf-8"))
+		except Exception:
+			return None
+
+	def _save_cached_document_handout(self, cache_key: str, payload: dict[str, Any]) -> None:
+		self.cache_dir.mkdir(parents=True, exist_ok=True)
+		cache_path = self.cache_dir / f"document_{cache_key}.json"
+		try:
+			cache_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 		except OSError:
 			return
 

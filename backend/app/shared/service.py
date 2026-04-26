@@ -3,7 +3,16 @@ from __future__ import annotations
 from ..preview.schema import PreviewKnowledgeRequest
 from ..preview.service import PreviewService
 from .OCR import OCRAgent
-from .schema import GoalType, OcrData, OcrRequest, SharedDispatchData, TargetModule
+from .document_parser import DocumentParserAgent
+from .schema import (
+    DocumentDispatchData,
+    DocumentParseData,
+    GoalType,
+    OcrData,
+    OcrRequest,
+    SharedDispatchData,
+    TargetModule,
+)
 
 
 _GUIDE_GOALS = {"做题模块", "guide"}
@@ -16,9 +25,11 @@ class SharedService:
         self,
         *,
         ocr_agent: OCRAgent | None = None,
+        document_parser: DocumentParserAgent | None = None,
         preview_service: PreviewService | None = None,
     ) -> None:
         self.ocr_agent = ocr_agent or OCRAgent()
+        self.document_parser = document_parser or DocumentParserAgent()
         self.preview_service = preview_service or PreviewService()
 
     def recognize_ocr(self, request: OcrRequest) -> OcrData:
@@ -43,6 +54,63 @@ class SharedService:
         if target_module == "preview":
             return self._forward_to_preview(request=request, ocr_data=ocr_data)
         return self._build_mistakes_handoff(request=request, ocr_data=ocr_data)
+
+    def parse_document(
+        self,
+        *,
+        user_id: str,
+        file_name: str,
+        file_bytes: bytes,
+        llm_enhancement: bool = True,
+        formula_enhancement: bool = True,
+    ) -> DocumentParseData:
+        result = self.document_parser.parse_bytes(
+            file_bytes=file_bytes,
+            file_name=file_name,
+            llm_enhancement=llm_enhancement,
+            formula_enhancement=formula_enhancement,
+        )
+        return DocumentParseData(user_id=user_id, **result)
+
+    def dispatch_document_result(
+        self,
+        *,
+        user_id: str,
+        goal: GoalType,
+        file_name: str,
+        file_bytes: bytes,
+        llm_enhancement: bool = True,
+        formula_enhancement: bool = True,
+    ) -> DocumentDispatchData:
+        parsed_document = self.parse_document(
+            user_id=user_id,
+            file_name=file_name,
+            file_bytes=file_bytes,
+            llm_enhancement=llm_enhancement,
+            formula_enhancement=formula_enhancement,
+        )
+        target_module = self._resolve_target_module(goal)
+        if target_module == "preview":
+            return self._forward_document_to_preview(
+                user_id=user_id,
+                goal=goal,
+                parsed_document=parsed_document,
+            )
+        return DocumentDispatchData(
+            user_id=user_id,
+            goal=goal,
+            target_module=target_module,
+            dispatch_status="handoff_required",
+            parsed_document=parsed_document,
+            downstream_endpoint=None,
+            downstream_request={
+                "user_id": user_id,
+                "file_name": file_name,
+                "content_text": parsed_document.plain_text,
+            },
+            downstream_response=None,
+            notes="文档已经解析完成，但当前只为预习模块提供自动转发。",
+        )
 
     def _resolve_target_module(self, goal: GoalType) -> TargetModule:
         if goal in _GUIDE_GOALS:
@@ -113,6 +181,35 @@ class SharedService:
             downstream_request=handoff_payload,
             downstream_response=None,
             notes="The mistakes module is not implemented in this checkout yet. Use downstream_request as the handoff payload.",
+        )
+
+    def _forward_document_to_preview(
+        self,
+        *,
+        user_id: str,
+        goal: GoalType,
+        parsed_document: DocumentParseData,
+    ) -> DocumentDispatchData:
+        content_text = parsed_document.markdown_text.strip() or parsed_document.plain_text.strip()
+        if not content_text:
+            raise RuntimeError("文档解析完成，但没有可用于预习模块的文本内容。")
+
+        downstream_request = PreviewKnowledgeRequest(
+            user_id=user_id,
+            content_text=content_text,
+            source_type="document_upload",
+        )
+        preview_result = self.preview_service.get_knowledge_points(downstream_request)
+        return DocumentDispatchData(
+            user_id=user_id,
+            goal=goal,
+            target_module="preview",
+            dispatch_status="forwarded",
+            parsed_document=parsed_document,
+            downstream_endpoint="/api/preview/knowledge-points",
+            downstream_request=downstream_request.model_dump(exclude_none=True),
+            downstream_response=preview_result.model_dump(),
+            notes="文档已解析并自动转发到预习模块，生成知识点摘要与知识点列表。",
         )
 
 

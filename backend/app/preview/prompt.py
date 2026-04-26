@@ -27,6 +27,24 @@ PREVIEW_CHAT_OUTPUT_SCHEMA = {
 }
 
 
+PREVIEW_HANDOUT_OUTPUT_SCHEMA = {
+	"article_title": "字符串，讲义标题，不超过20字",
+	"article_subtitle": "字符串，讲义副标题，不超过30字",
+	"introduction": "字符串，2到4句导语，帮助学生知道这份讲义会学什么",
+	"blocks": [
+		{
+			"id": "字符串，唯一标识，例如 block_001",
+			"type": "section_heading | paragraph | formula | thinking_prompt | note",
+			"title": "字符串，可为空",
+			"text": "字符串，正文内容",
+			"supporting_text": "字符串，可为空",
+			"section_title": "字符串，可为空",
+		}
+	],
+	"footer_prompt": "字符串，结尾学习提示",
+}
+
+
 PREVIEW_KNOWLEDGE_SYSTEM_PROMPT = dedent(
 	"""
 	你是 BlueTutor 的预习指导助手，服务对象是小学三年级到初中阶段学生。
@@ -59,6 +77,25 @@ PREVIEW_CHAT_SYSTEM_PROMPT = dedent(
 	5. 如果用户问题超出上下文，先基于上下文解释，再提醒当前页重点。
 	6. follow_up_questions 返回 2 到 3 个适合继续预习的问题；如果不合适，可以返回空数组。
 	7. 不要编造教材中不存在的定义、定理或结论。
+
+	输出 JSON 结构必须与下面保持一致：
+	"""
+).strip()
+
+
+PREVIEW_HANDOUT_SYSTEM_PROMPT = dedent(
+	"""
+	你是 BlueTutor 的预习讲义整理助手，服务对象是小学三年级到初中阶段学生。
+	你的任务是把文档解析得到的原始内容，整理成适合学生自学的“结构化预习讲义”。
+
+	你的输出必须符合以下要求：
+	1. 只输出 JSON，不要输出 markdown 代码块，不要输出解释性前后缀。
+	2. 返回字段只能包含 article_title、article_subtitle、introduction、blocks、footer_prompt。
+	3. blocks 必须保持 5 到 12 个区块，整体结构要清楚，适合二级讲义页逐段阅读。
+	4. 优先保留原文中真正存在的知识点、定义、公式和例子，不要虚构教材之外的知识。
+	5. 若原文存在公式、规律、例题或步骤，优先整理成 formula、paragraph、note、thinking_prompt 等区块。
+	6. 输出面向学生，语言要清楚、简洁、分段明确，不要写成教师教案或流水账。
+	7. 如果原文内容比较碎片化，也要尽量整理成一份可以阅读的讲义，但不要编造不存在的信息。
 
 	输出 JSON 结构必须与下面保持一致：
 	"""
@@ -118,6 +155,31 @@ def build_preview_chat_prompt(
 	).strip()
 
 
+def build_handout_generation_prompt(
+	parsed_markdown: str,
+	parsed_plain_text: str,
+	file_name: str,
+) -> str:
+	output_schema = json.dumps(PREVIEW_HANDOUT_OUTPUT_SCHEMA, ensure_ascii=False, indent=2)
+	markdown_excerpt = parsed_markdown.strip()[:12000]
+	plain_text_excerpt = parsed_plain_text.strip()[:8000]
+	return dedent(
+		f"""
+		{PREVIEW_HANDOUT_SYSTEM_PROMPT}
+		{output_schema}
+
+		原始文件名：
+		{file_name}
+
+		文档解析后的 markdown 内容：
+		{markdown_excerpt}
+
+		文档解析后的纯文本内容：
+		{plain_text_excerpt}
+		"""
+	).strip()
+
+
 def _format_selected_knowledge_points(selected_knowledge_points: list[str]) -> str:
 	cleaned_points = [point.strip() for point in selected_knowledge_points if point and point.strip()]
 	if not cleaned_points:
@@ -136,6 +198,9 @@ __all__ = [
 	"PREVIEW_CHAT_OUTPUT_SCHEMA",
 	"PREVIEW_KNOWLEDGE_SYSTEM_PROMPT",
 	"PREVIEW_CHAT_SYSTEM_PROMPT",
+	"PREVIEW_HANDOUT_OUTPUT_SCHEMA",
+	"PREVIEW_HANDOUT_SYSTEM_PROMPT",
 	"build_knowledge_extraction_prompt",
+	"build_handout_generation_prompt",
 	"build_preview_chat_prompt",
 ]

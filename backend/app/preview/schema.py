@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 T = TypeVar("T")
 
-PreviewSourceType = Literal["pdf_selection", "screenshot_ocr", "manual_input", "quick_topic"]
+PreviewSourceType = Literal["pdf_selection", "screenshot_ocr", "manual_input", "quick_topic", "document_upload"]
 ChatMessageRole = Literal["user", "assistant"]
 
 
@@ -46,6 +46,54 @@ class PreviewKnowledgeData(BaseModel):
 
 
 class PreviewKnowledgeResponse(ApiResponse[PreviewKnowledgeData]):
+	pass
+
+
+HandoutBlockType = Literal["section_heading", "paragraph", "formula", "thinking_prompt", "note"]
+
+
+class PreviewHandoutBlockItem(BaseModel):
+	id: str = Field(min_length=1, description="讲义区块唯一标识")
+	type: HandoutBlockType = Field(description="讲义区块类型")
+	title: str = Field(default="", description="区块标题")
+	text: str = Field(min_length=1, description="区块正文")
+	supporting_text: str = Field(default="", description="补充说明")
+	section_title: str = Field(default="", description="所属章节标题")
+
+
+class PreviewGeneratedHandoutData(BaseModel):
+	article_title: str = Field(min_length=1, description="讲义标题")
+	article_subtitle: str = Field(default="", description="讲义副标题")
+	introduction: str = Field(min_length=1, description="讲义导语")
+	blocks: list[PreviewHandoutBlockItem] = Field(default_factory=list, description="讲义正文区块")
+	footer_prompt: str = Field(default="", description="讲义底部提示语")
+
+
+class PreviewGeneratedHandoutResponse(ApiResponse[PreviewGeneratedHandoutData]):
+	pass
+
+
+class PreviewUploadHandoutRequest(BaseModel):
+	user_id: str = Field(min_length=1, description="用户标识")
+	file_name: str = Field(min_length=1, description="原始文件名")
+	parsed_markdown: str = Field(min_length=1, description="文档解析得到的 markdown 文本")
+	parsed_plain_text: str = Field(min_length=1, description="文档解析得到的纯文本")
+
+
+class PreviewDocumentHandoutData(BaseModel):
+	file_id: str = Field(min_length=1, description="文档唯一标识")
+	file_name: str = Field(min_length=1, description="原始文件名")
+	file_extension: str = Field(min_length=1, description="文件扩展名")
+	status: str = Field(default="success", description="处理状态")
+	summary: str = Field(default="", description="预习摘要")
+	knowledge_points: list[KnowledgePointItem] = Field(default_factory=list, description="知识点列表")
+	handout: PreviewGeneratedHandoutData = Field(description="结构化讲义内容")
+	original_markdown: str = Field(default="", description="原始解析 markdown")
+	original_plain_text: str = Field(default="", description="原始解析纯文本")
+	cache_hit: bool = Field(default=False, description="是否命中后端缓存")
+
+
+class PreviewDocumentHandoutResponse(ApiResponse[PreviewDocumentHandoutData]):
 	pass
 
 
@@ -89,6 +137,13 @@ __all__ = [
 	"PreviewKnowledgeRequest",
 	"PreviewKnowledgeData",
 	"PreviewKnowledgeResponse",
+	"HandoutBlockType",
+	"PreviewGeneratedHandoutData",
+	"PreviewGeneratedHandoutResponse",
+	"PreviewHandoutBlockItem",
+	"PreviewUploadHandoutRequest",
+	"PreviewDocumentHandoutData",
+	"PreviewDocumentHandoutResponse",
 	"PreviewChatMessage",
 	"PreviewChatRequest",
 	"PreviewChatData",

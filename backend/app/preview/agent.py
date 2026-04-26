@@ -9,7 +9,7 @@ from typing import Any, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
-from .prompt import build_knowledge_extraction_prompt, build_preview_chat_prompt
+from .prompt import build_handout_generation_prompt, build_knowledge_extraction_prompt, build_preview_chat_prompt
 from .schema import PreviewChatMessage
 from ..shared.openai_compat import build_chat_completions_url, get_first_env
 
@@ -62,6 +62,20 @@ class PreviewAgent:
 			selected_knowledge_points=selected_knowledge_points,
 			topic_title=topic_title,
 			history=history,
+		)
+		return self._call_llm_json(prompt)
+
+	def generate_handout(
+		self,
+		*,
+		parsed_markdown: str,
+		parsed_plain_text: str,
+		file_name: str,
+	) -> dict[str, Any]:
+		prompt = build_handout_generation_prompt(
+			parsed_markdown=parsed_markdown,
+			parsed_plain_text=parsed_plain_text,
+			file_name=file_name,
 		)
 		return self._call_llm_json(prompt)
 
