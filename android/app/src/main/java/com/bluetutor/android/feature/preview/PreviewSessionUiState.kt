@@ -31,8 +31,10 @@ data class PreviewChatSessionUiModel(
 
 data class PreviewTopicWorkspaceUiState(
     val topic: PreviewQuickTopicUiModel,
+    val isHandoutLoading: Boolean = false,
     val isDigestLoading: Boolean = false,
     val isSending: Boolean = false,
+    val handoutErrorMessage: String? = null,
     val digestErrorMessage: String? = null,
     val chatErrorMessage: String? = null,
     val aiSummary: String = "",

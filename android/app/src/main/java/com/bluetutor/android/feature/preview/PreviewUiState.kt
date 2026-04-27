@@ -8,9 +8,14 @@ data class PreviewUiState(
     val weeklyGoalTarget: Int,
     val quickTopics: List<PreviewQuickTopicUiModel>,
     val quickEntries: List<PreviewQuickEntryUiModel>,
-    val recommendedLessons: List<PreviewRecommendedLessonUiModel>,
+    val recentLessons: List<PreviewHistoryEntryUiModel>,
     val uploadCard: PreviewUploadCardUiModel,
 )
+
+enum class PreviewTopicSource {
+    QuickTopic,
+    UploadedDocument,
+}
 
 data class PreviewQuickTopicUiModel(
     val id: Int,
@@ -20,6 +25,10 @@ data class PreviewQuickTopicUiModel(
     val intro: String,
     val seedContent: String,
     val handout: PreviewHandoutUiModel,
+    val source: PreviewTopicSource = PreviewTopicSource.QuickTopic,
+    val originalDocumentUri: String? = null,
+    val originalDocumentMimeType: String? = null,
+    val originalFileName: String? = null,
 )
 
 data class PreviewHandoutUiModel(
@@ -70,6 +79,17 @@ data class PreviewRecommendedLessonUiModel(
     val masteryPercent: Int,
 )
 
+data class PreviewHistoryEntryUiModel(
+    val id: String,
+    val topicId: Int,
+    val title: String,
+    val subtitle: String,
+    val tag: String,
+    val source: PreviewTopicSource,
+    val updatedAtMillis: Long,
+    val isInProgress: Boolean = false,
+)
+
 enum class PreviewUploadStage {
     Idle,
     Processing,
@@ -87,6 +107,7 @@ data class PreviewUploadCardUiModel(
 fun previewMockUiState(
     uploadStage: PreviewUploadStage,
     uploadedFileName: String?,
+    recentLessons: List<PreviewHistoryEntryUiModel> = emptyList(),
 ): PreviewUiState {
     val uploadCard = when (uploadStage) {
         PreviewUploadStage.Idle -> PreviewUploadCardUiModel(
@@ -162,18 +183,17 @@ fun previewMockUiState(
             ),
         )
 
-    val recommendedLessons = quickTopics
-        .shuffled()
+    val fallbackRecentLessons = quickTopics
         .take(2)
         .mapIndexed { index, topic ->
-            PreviewRecommendedLessonUiModel(
-                id = index + 1,
+            PreviewHistoryEntryUiModel(
+                id = "quick_${topic.id}",
                 topicId = topic.id,
-                tag = "快捷预习",
-                grade = topic.grade,
                 title = topic.label,
-                description = topic.intro,
-                masteryPercent = listOf(42, 58, 67, 73, 81)[index % 5],
+                subtitle = topic.intro,
+                tag = "快捷预习",
+                source = PreviewTopicSource.QuickTopic,
+                updatedAtMillis = System.currentTimeMillis() - index * 3600_000L,
             )
         }
 
@@ -185,7 +205,7 @@ fun previewMockUiState(
         weeklyGoalTarget = 5,
         quickTopics = quickTopics,
         quickEntries = emptyList(),
-        recommendedLessons = recommendedLessons,
+        recentLessons = if (recentLessons.isNotEmpty()) recentLessons else fallbackRecentLessons,
         uploadCard = uploadCard,
     )
 }

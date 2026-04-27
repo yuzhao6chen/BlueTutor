@@ -1,6 +1,10 @@
 package com.bluetutor.android.feature.preview
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -69,22 +73,28 @@ import com.bluetutor.android.core.designsystem.component.BtUploadStatusCard
 import com.bluetutor.android.core.designsystem.component.BtUploadStatusCardState
 import com.bluetutor.android.feature.preview.component.PreviewQuickEntryCard
 import com.bluetutor.android.feature.preview.component.PreviewQuickTopicCard
-import com.bluetutor.android.feature.preview.component.PreviewRecommendedLessonCard
 import com.bluetutor.android.feature.preview.data.PreviewApiChatMessage
 import com.bluetutor.android.feature.preview.data.PreviewApiClient
 import com.bluetutor.android.feature.preview.data.PreviewApiChatStreamEvent
+import com.bluetutor.android.feature.preview.data.PreviewApiDocumentHandoutResult
+import com.bluetutor.android.feature.preview.data.PreviewApiHandoutBlock
 import com.bluetutor.android.feature.preview.data.PreviewApiKnowledgePoint
 import com.bluetutor.android.feature.preview.data.PreviewLocalCache
 import com.bluetutor.android.ui.theme.BluetutorGradients
 import com.bluetutor.android.ui.theme.BluetutorSpacing
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private enum class PreviewDestination {
     Home,
     Handout,
     Chat,
+    History,
 }
 
 private data class PreviewSelectedExcerptUiState(
@@ -98,19 +108,14 @@ fun PreviewRoute(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val quickTopicCatalog = remember { previewMockUiState(PreviewUploadStage.Idle, null).quickTopics }
     var selectedTopicId by rememberSaveable { mutableIntStateOf(3) }
     var uploadStage by remember { mutableStateOf(PreviewUploadStage.Idle) }
     var uploadedFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var workspace by remember { mutableStateOf<PreviewTopicWorkspaceUiState?>(null) }
+    var recentHistory by remember { mutableStateOf(PreviewLocalCache.readHistory(context)) }
     var destination by remember { mutableStateOf(PreviewDestination.Home) }
     val scope = rememberCoroutineScope()
-
-    LaunchedEffect(uploadStage) {
-        if (uploadStage == PreviewUploadStage.Processing) {
-            delay(1400)
-            uploadStage = PreviewUploadStage.Success
-        }
-    }
 
     LaunchedEffect(destination) {
         onBottomBarVisibilityChange(destination == PreviewDestination.Home)
@@ -122,17 +127,24 @@ fun PreviewRoute(
         }
     }
 
-    val uiState = remember(uploadStage, uploadedFileName) {
+    val uiState = remember(uploadStage, uploadedFileName, recentHistory) {
         previewMockUiState(
             uploadStage = uploadStage,
             uploadedFileName = uploadedFileName,
+            recentLessons = recentHistory.take(2),
         )
+    }
+
+    fun upsertHistoryEntry(entry: PreviewHistoryEntryUiModel) {
+        PreviewLocalCache.upsertHistoryEntry(context, entry)
+        recentHistory = PreviewLocalCache.readHistory(context)
     }
 
     fun persistWorkspace(nextState: PreviewTopicWorkspaceUiState) {
         PreviewLocalCache.saveTopicCache(
             context = context,
             topicId = nextState.topic.id,
+            topic = nextState.topic,
             summary = nextState.aiSummary,
             knowledgePoints = nextState.knowledgePoints,
             selectedKnowledgePointIds = nextState.selectedKnowledgePointIds,
@@ -160,6 +172,7 @@ fun PreviewRoute(
 
     fun restoreWorkspace(topic: PreviewQuickTopicUiModel): PreviewTopicWorkspaceUiState {
         val cached = PreviewLocalCache.readTopicCache(context, topic.id)
+        val resolvedTopic = cached?.topic ?: topic
         val cachedKnowledgePoints = cached?.knowledgePoints.orEmpty()
         val selectedIds = when {
             cached != null && cached.selectedKnowledgePointIds.isNotEmpty() -> cached.selectedKnowledgePointIds
@@ -168,14 +181,14 @@ fun PreviewRoute(
         }
         val sessions = cached?.chatSessions
             ?.sortedByDescending { it.updatedAtMillis }
-            ?.ifEmpty { listOf(buildFreshSession(topic)) }
-            ?: listOf(buildFreshSession(topic))
+            ?.ifEmpty { listOf(buildFreshSession(resolvedTopic)) }
+            ?: listOf(buildFreshSession(resolvedTopic))
         val activeSessionId = cached?.activeChatSessionId
             ?.takeIf { candidate -> sessions.any { it.id == candidate } }
             ?: sessions.first().id
 
         return PreviewTopicWorkspaceUiState(
-            topic = topic,
+            topic = resolvedTopic,
             aiSummary = cached?.summary.orEmpty(),
             knowledgePoints = cachedKnowledgePoints,
             selectedKnowledgePointIds = selectedIds,
@@ -195,6 +208,9 @@ fun PreviewRoute(
     }
 
     fun refreshTopicDigest(topic: PreviewQuickTopicUiModel, forceRefresh: Boolean) {
+        if (topic.source != PreviewTopicSource.QuickTopic) {
+            return
+        }
         val current = workspace?.takeIf { it.topic.id == topic.id } ?: restoreWorkspace(topic)
         if (!forceRefresh && current.aiSummary.isNotBlank() && current.knowledgePoints.isNotEmpty()) {
             workspace = current
@@ -240,14 +256,216 @@ fun PreviewRoute(
         }
     }
 
+    fun buildHistoryEntry(
+        topic: PreviewQuickTopicUiModel,
+        summary: String,
+        isInProgress: Boolean = false,
+    ): PreviewHistoryEntryUiModel {
+        val now = System.currentTimeMillis()
+        return PreviewHistoryEntryUiModel(
+            id = "preview_${topic.id}",
+            topicId = topic.id,
+            title = if (topic.source == PreviewTopicSource.UploadedDocument) {
+                topic.handout.articleTitle.ifBlank { topic.label }
+            } else {
+                topic.label
+            },
+            subtitle = summary.ifBlank { topic.intro }.take(48),
+            tag = if (topic.source == PreviewTopicSource.UploadedDocument) "上传讲义" else "快捷预习",
+            source = topic.source,
+            updatedAtMillis = now,
+            isInProgress = isInProgress,
+        )
+    }
+
+    fun resolveTopicById(topicId: Int): PreviewQuickTopicUiModel? {
+        return quickTopicCatalog.firstOrNull { it.id == topicId }
+            ?: PreviewLocalCache.readSavedTopic(context, topicId)
+    }
+
     fun openQuickTopic(topic: PreviewQuickTopicUiModel) {
         selectedTopicId = topic.id
         val restored = restoreWorkspace(topic)
         workspace = restored
         destination = PreviewDestination.Handout
+        upsertHistoryEntry(
+            buildHistoryEntry(
+                topic = restored.topic,
+                summary = restored.aiSummary,
+            ),
+        )
         if (restored.aiSummary.isBlank() && restored.knowledgePoints.isEmpty()) {
             refreshTopicDigest(topic, forceRefresh = false)
         }
+    }
+
+    fun openTopicById(topicId: Int) {
+        resolveTopicById(topicId)?.let(::openQuickTopic)
+    }
+
+    fun openOriginalDocument(topic: PreviewQuickTopicUiModel) {
+        val uriString = topic.originalDocumentUri ?: return
+        val uri = android.net.Uri.parse(uriString)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, topic.originalDocumentMimeType ?: "*/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            context.startActivity(intent)
+        }
+    }
+
+    fun buildUploadedTopicPlaceholder(
+        topicId: Int,
+        fileName: String,
+        documentUri: String,
+        documentMimeType: String?,
+    ): PreviewQuickTopicUiModel {
+        val baseTitle = fileName.substringBeforeLast('.', missingDelimiterValue = fileName)
+        return PreviewQuickTopicUiModel(
+            id = topicId,
+            emoji = emojiForFileName(fileName),
+            label = baseTitle.ifBlank { "上传讲义" },
+            grade = "上传文档",
+            intro = "文档已上传，正在识别内容并整理预习讲义。",
+            seedContent = "",
+            source = PreviewTopicSource.UploadedDocument,
+            originalDocumentUri = documentUri,
+            originalDocumentMimeType = documentMimeType,
+            originalFileName = fileName,
+            handout = PreviewHandoutUiModel(
+                articleTitle = baseTitle.ifBlank { "上传讲义" },
+                articleSubtitle = "正在生成格式化讲义",
+                introduction = "已收到文档，正在解析原文、提取知识点并生成可阅读讲义。",
+                blocks = emptyList(),
+                footerPrompt = "解析完成后，这里会出现结构化讲义与 AI 对话入口。",
+            ),
+        )
+    }
+
+    fun applyUploadedDocumentResult(
+        placeholderTopic: PreviewQuickTopicUiModel,
+        result: PreviewApiDocumentHandoutResult,
+    ): PreviewQuickTopicUiModel {
+        val articleTitle = result.handout.articleTitle.ifBlank {
+            placeholderTopic.label
+        }
+        return placeholderTopic.copy(
+            emoji = emojiForFileName(result.fileName),
+            label = articleTitle,
+            grade = "上传讲义",
+            intro = result.summary.ifBlank { placeholderTopic.intro },
+            seedContent = buildUploadedDocumentSeedContent(result),
+            originalFileName = result.fileName,
+            handout = PreviewHandoutUiModel(
+                articleTitle = articleTitle,
+                articleSubtitle = result.handout.articleSubtitle,
+                introduction = result.handout.introduction,
+                blocks = result.handout.blocks.toPreviewHandoutBlocks(),
+                footerPrompt = result.handout.footerPrompt,
+            ),
+        )
+    }
+
+    fun startDocumentUpload(selectedUri: android.net.Uri) {
+        val contentResolver = context.contentResolver
+        runCatching {
+            contentResolver.takePersistableUriPermission(
+                selectedUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+
+        val fileName = contentResolver.queryDisplayName(selectedUri) ?: "上传讲义"
+        val mimeType = contentResolver.getType(selectedUri)
+        val topicId = buildUploadedTopicId(fileName)
+        val placeholderTopic = buildUploadedTopicPlaceholder(
+            topicId = topicId,
+            fileName = fileName,
+            documentUri = selectedUri.toString(),
+            documentMimeType = mimeType,
+        )
+        val nextWorkspace = restoreWorkspace(placeholderTopic).copy(
+            topic = placeholderTopic,
+            isHandoutLoading = true,
+            handoutErrorMessage = null,
+            aiSummary = "",
+            knowledgePoints = emptyList(),
+            selectedKnowledgePointIds = emptySet(),
+        )
+
+        selectedTopicId = topicId
+        workspace = nextWorkspace
+        persistWorkspace(nextWorkspace)
+        destination = PreviewDestination.Handout
+        uploadStage = PreviewUploadStage.Processing
+        uploadedFileName = fileName
+        upsertHistoryEntry(
+            buildHistoryEntry(
+                topic = placeholderTopic,
+                summary = "正在识别原始文档并整理讲义内容。",
+                isInProgress = true,
+            ),
+        )
+
+        scope.launch {
+            runCatching {
+                val fileBytes = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(selectedUri)?.use { input ->
+                        input.readBytes()
+                    } ?: error("无法读取所选文档")
+                }
+                PreviewApiClient.uploadDocumentHandout(
+                    fileName = fileName,
+                    fileBytes = fileBytes,
+                    mimeType = mimeType,
+                )
+            }.onSuccess { result ->
+                val nextTopic = applyUploadedDocumentResult(placeholderTopic, result)
+                val nextKnowledgePoints = result.knowledgePoints.toUiModels()
+                val nextState = (workspace?.takeIf { it.topic.id == topicId } ?: nextWorkspace).copy(
+                    topic = nextTopic,
+                    isHandoutLoading = false,
+                    handoutErrorMessage = null,
+                    aiSummary = result.summary,
+                    knowledgePoints = nextKnowledgePoints,
+                    selectedKnowledgePointIds = nextKnowledgePoints.map { it.id }.toSet(),
+                )
+                workspace = nextState
+                persistWorkspace(nextState)
+                uploadStage = PreviewUploadStage.Success
+                uploadedFileName = result.fileName
+                upsertHistoryEntry(
+                    buildHistoryEntry(
+                        topic = nextTopic,
+                        summary = result.summary,
+                        isInProgress = false,
+                    ),
+                )
+            }.onFailure { error ->
+                val nextState = (workspace?.takeIf { it.topic.id == topicId } ?: nextWorkspace).copy(
+                    isHandoutLoading = false,
+                    handoutErrorMessage = error.toPreviewErrorMessage(),
+                )
+                workspace = nextState
+                persistWorkspace(nextState)
+                uploadStage = PreviewUploadStage.Idle
+                upsertHistoryEntry(
+                    buildHistoryEntry(
+                        topic = placeholderTopic,
+                        summary = error.toPreviewErrorMessage(),
+                        isInProgress = false,
+                    ),
+                )
+            }
+        }
+    }
+
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        val selectedUri = uri ?: return@rememberLauncherForActivityResult
+        startDocumentUpload(selectedUri)
     }
 
     fun createNewSession(
@@ -507,20 +725,12 @@ fun PreviewRoute(
             onSelectTopic = { selectedTopicId = it.id },
             onOpenQuickTopic = ::openQuickTopic,
             onPrimaryUploadAction = {
-                when (uploadStage) {
-                    PreviewUploadStage.Idle -> {
-                        uploadedFileName = "六年级下册行程问题讲义.pdf"
-                        uploadStage = PreviewUploadStage.Processing
-                    }
-
-                    PreviewUploadStage.Processing -> Unit
-                    PreviewUploadStage.Success -> Unit
+                if (uploadStage != PreviewUploadStage.Processing) {
+                    documentPickerLauncher.launch(previewDocumentMimeTypes())
                 }
             },
-            onSecondaryUploadAction = {
-                uploadedFileName = null
-                uploadStage = PreviewUploadStage.Idle
-            },
+            onOpenHistory = { destination = PreviewDestination.History },
+            onOpenRecentLesson = { entry -> openTopicById(entry.topicId) },
             modifier = modifier,
         )
 
@@ -533,6 +743,9 @@ fun PreviewRoute(
                     session = session,
                     onBack = { destination = PreviewDestination.Home },
                     onOpenAiChat = { openAiChat(session.topic) },
+                    onViewOriginalDocument = session.topic.originalDocumentUri?.let {
+                        { openOriginalDocument(session.topic) }
+                    },
                     onAskSelectedText = { excerpt, sectionTitle ->
                         openAiChat(
                             topic = session.topic,
@@ -544,6 +757,15 @@ fun PreviewRoute(
                     modifier = modifier,
                 )
             }
+        }
+
+        PreviewDestination.History -> {
+            PreviewHistoryScreen(
+                entries = recentHistory,
+                onBack = { destination = PreviewDestination.Home },
+                onOpenEntry = { entry -> openTopicById(entry.topicId) },
+                modifier = modifier,
+            )
         }
 
         PreviewDestination.Chat -> {
@@ -573,17 +795,10 @@ private fun PreviewHomeScreen(
     onSelectTopic: (PreviewQuickTopicUiModel) -> Unit,
     onOpenQuickTopic: (PreviewQuickTopicUiModel) -> Unit,
     onPrimaryUploadAction: () -> Unit,
-    onSecondaryUploadAction: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenRecentLesson: (PreviewHistoryEntryUiModel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val lessonCount = uiState.recommendedLessons.size.coerceAtLeast(1)
-    val previewPagerState = rememberPagerState(
-        initialPage = previewLoopingInitialPage(lessonCount),
-        pageCount = {
-            if (uiState.recommendedLessons.size > 1) Int.MAX_VALUE else lessonCount
-        },
-    )
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -686,39 +901,44 @@ private fun PreviewHomeScreen(
 
         Column(verticalArrangement = Arrangement.spacedBy(BluetutorSpacing.md)) {
             BtSectionTitle(
-                title = "今日推荐",
+                title = "最近预习",
                 actionText = "查看全部",
-                onActionClick = onSecondaryUploadAction,
+                onActionClick = onOpenHistory,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            if (uiState.recommendedLessons.isNotEmpty()) {
-                HorizontalPager(
-                    state = previewPagerState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(286.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    pageSpacing = 12.dp,
-                    userScrollEnabled = uiState.recommendedLessons.size > 1,
-                ) { page ->
-                    val actualIndex = page.mod(uiState.recommendedLessons.size)
-                    val lesson = uiState.recommendedLessons[actualIndex]
-                    PreviewRecommendedLessonCard(
-                        lesson = lesson,
-                        onActionClick = {
-                            uiState.quickTopics
-                                .firstOrNull { it.id == lesson.topicId }
-                                ?.let(onOpenQuickTopic)
-                        },
-                    )
+            if (uiState.recentLessons.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    tonalElevation = 1.dp,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "还没有最近预习",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "可以先点一个快捷预习专题，或者上传讲义开始整理自己的预习资料。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-
-                if (uiState.recommendedLessons.size > 1) {
-                    PreviewCarouselIndicator(
-                        currentIndex = previewPagerState.currentPage.mod(uiState.recommendedLessons.size),
-                        totalCount = uiState.recommendedLessons.size,
-                    )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    uiState.recentLessons.take(2).forEach { entry ->
+                        PreviewRecentLessonRow(
+                            entry = entry,
+                            onClick = { onOpenRecentLesson(entry) },
+                        )
+                    }
                 }
             }
         }
@@ -731,12 +951,14 @@ private fun PreviewHandoutScreen(
     session: PreviewTopicWorkspaceUiState,
     onBack: () -> Unit,
     onOpenAiChat: () -> Unit,
+    onViewOriginalDocument: (() -> Unit)? = null,
     onAskSelectedText: (String, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var selectedExcerpt by remember(session.topic.id) { mutableStateOf<PreviewSelectedExcerptUiState?>(null) }
     var selectionResetToken by remember(session.topic.id) { mutableIntStateOf(0) }
     val handout = session.topic.handout
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -764,6 +986,34 @@ private fun PreviewHandoutScreen(
                             contentDescription = "返回",
                             modifier = Modifier.size(18.dp),
                         )
+                    }
+                },
+                actions = {
+                    if (onViewOriginalDocument != null) {
+                        Box {
+                            IconButton(
+                                onClick = { menuExpanded = true },
+                                modifier = Modifier.size(38.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.MoreVert,
+                                    contentDescription = "更多",
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("查看原始文档") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onViewOriginalDocument()
+                                    },
+                                )
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -832,19 +1082,108 @@ private fun PreviewHandoutScreen(
                 }
             }
 
-            handout.blocks.forEach { block ->
-                PreviewArticleBlock(
-                    block = block,
-                    resetToken = selectionResetToken,
-                    onSelectionChanged = { text ->
-                        selectedExcerpt = text?.takeIf { it.isNotBlank() }?.let {
-                            PreviewSelectedExcerptUiState(
-                                text = it,
-                                sectionTitle = block.sectionTitle.ifBlank { block.text },
+            if (session.isHandoutLoading) {
+                Surface(
+                    shape = RoundedCornerShape(26.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                    tonalElevation = 2.dp,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                            Text(
+                                text = "正在整理这份讲义",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
                             )
                         }
-                    },
-                )
+                        Text(
+                            text = "已进入讲义页。后台正在持续完成文档识别、知识点提取和讲义排版，完成后会自动刷新。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            session.handoutErrorMessage?.let { message ->
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.72f),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "讲义整理失败",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+            }
+
+            if (session.aiSummary.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.58f),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "AI 预习摘要",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = session.aiSummary,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
+            }
+
+            if (!session.isHandoutLoading) {
+                handout.blocks.forEach { block ->
+                    PreviewArticleBlock(
+                        block = block,
+                        resetToken = selectionResetToken,
+                        onSelectionChanged = { text ->
+                            selectedExcerpt = text?.takeIf { it.isNotBlank() }?.let {
+                                PreviewSelectedExcerptUiState(
+                                    text = it,
+                                    sectionTitle = block.sectionTitle.ifBlank { block.text },
+                                )
+                            }
+                        },
+                    )
+                }
             }
 
             PreviewAiEntryCard(
@@ -1039,6 +1378,146 @@ private fun PreviewAiChatScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PreviewHistoryScreen(
+    entries: List<PreviewHistoryEntryUiModel>,
+    onBack: () -> Unit,
+    onOpenEntry: (PreviewHistoryEntryUiModel) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                expandedHeight = 52.dp,
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                title = {
+                    Text(
+                        text = "全部预习历史",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack, modifier = Modifier.size(38.dp)) {
+                        Icon(
+                            imageVector = Icons.Rounded.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BluetutorGradients.pageBackground())
+                .verticalScroll(rememberScrollState())
+                .padding(innerPadding)
+                .padding(horizontal = BluetutorSpacing.screenHorizontal, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (entries.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "还没有预习历史",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "打开一个快捷预习专题，或者上传一份讲义后，这里会自动记录最近的学习入口。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                entries.forEach { entry ->
+                    PreviewRecentLessonRow(
+                        entry = entry,
+                        onClick = { onOpenEntry(entry) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewRecentLessonRow(
+    entry: PreviewHistoryEntryUiModel,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        tonalElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = entry.tag,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (entry.source == PreviewTopicSource.UploadedDocument) Color(0xFF0F766E) else Color(0xFF1D4ED8),
+                    modifier = Modifier
+                        .background(
+                            if (entry.source == PreviewTopicSource.UploadedDocument) Color(0xFFCCFBF1) else Color(0xFFDBEAFE),
+                            RoundedCornerShape(8.dp),
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                Text(
+                    text = formatPreviewHistoryTime(entry.updatedAtMillis),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = entry.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (entry.isInProgress) "后台仍在整理中，可先进入查看进度。" else entry.subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -1257,6 +1736,7 @@ private fun PreviewAiEntryCard(
     footerPrompt: String,
     onOpenAiChat: () -> Unit,
 ) {
+    val aiEnabled = !session.isHandoutLoading && session.handoutErrorMessage == null
     Surface(
         shape = RoundedCornerShape(26.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -1275,6 +1755,8 @@ private fun PreviewAiEntryCard(
             )
             Text(
                 text = when {
+                    session.isHandoutLoading -> "文档仍在整理中，讲义完成后就可以围绕它继续追问。"
+                    session.handoutErrorMessage != null -> "讲义整理失败，当前暂时无法基于这份文档进入 AI 对话。"
                     session.isDigestLoading -> "AI 正在后台准备这节讲义的补充上下文。"
                     session.digestErrorMessage != null -> "离线讲义可直接阅读；需要联网时再进入 AI 对话。"
                     session.aiSummary.isNotBlank() -> "AI 已准备好，可以继续围绕这节讲义追问。"
@@ -1285,11 +1767,12 @@ private fun PreviewAiEntryCard(
             )
             Button(
                 onClick = onOpenAiChat,
+                enabled = aiEnabled,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(),
             ) {
-                Text("进入 AI 对话")
+                Text(if (session.isHandoutLoading) "讲义整理中" else "进入 AI 对话")
             }
         }
     }
@@ -1465,18 +1948,29 @@ private fun PreviewCarouselIndicator(
     }
 }
 
-private fun previewLoopingInitialPage(itemCount: Int): Int {
-    if (itemCount <= 1) return 0
-    val midpoint = Int.MAX_VALUE / 2
-    return midpoint - midpoint % itemCount
-}
-
 private fun List<PreviewApiKnowledgePoint>.toUiModels(): List<PreviewKnowledgePointUiModel> = map {
     PreviewKnowledgePointUiModel(
         id = it.id,
         title = it.title,
         description = it.description,
         confidence = it.confidence,
+    )
+}
+
+private fun List<PreviewApiHandoutBlock>.toPreviewHandoutBlocks(): List<PreviewHandoutBlockUiModel> = mapIndexed { index, block ->
+    PreviewHandoutBlockUiModel(
+        id = block.id.ifBlank { "block_${index + 1}" },
+        type = when (block.type.lowercase(Locale.ROOT)) {
+            "section_heading" -> PreviewHandoutBlockType.SectionHeading
+            "formula" -> PreviewHandoutBlockType.Formula
+            "thinking_prompt" -> PreviewHandoutBlockType.ThinkingPrompt
+            "note" -> PreviewHandoutBlockType.Note
+            else -> PreviewHandoutBlockType.Paragraph
+        },
+        title = block.title,
+        text = block.text,
+        supportingText = block.supportingText,
+        sectionTitle = block.sectionTitle,
     )
 }
 
@@ -1588,5 +2082,71 @@ private fun Throwable.toPreviewErrorMessage(): String {
         originalMessage
     } else {
         "暂时无法连接到本地预习服务，请确认 FastAPI 已启动。"
+    }
+}
+
+private fun buildUploadedTopicId(fileName: String): Int {
+    return -(fileName.lowercase(Locale.ROOT).hashCode().let { if (it == 0) 1 else kotlin.math.abs(it) })
+}
+
+private fun emojiForFileName(fileName: String): String {
+    val lower = fileName.lowercase(Locale.ROOT)
+    return when {
+        lower.endsWith(".pdf") -> "📄"
+        lower.endsWith(".doc") || lower.endsWith(".docx") -> "📝"
+        lower.endsWith(".ppt") || lower.endsWith(".pptx") -> "📊"
+        lower.endsWith(".xls") || lower.endsWith(".xlsx") || lower.endsWith(".xlsm") -> "📈"
+        lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".bmp") || lower.endsWith(".gif") -> "🖼️"
+        else -> "📘"
+    }
+}
+
+private fun buildUploadedDocumentSeedContent(result: PreviewApiDocumentHandoutResult): String {
+    return buildString {
+        append(result.summary)
+        if (result.knowledgePoints.isNotEmpty()) {
+            append("\n\n知识点：\n")
+            result.knowledgePoints.forEach { item ->
+                append("- ")
+                append(item.title)
+                if (item.description.isNotBlank()) {
+                    append("：")
+                    append(item.description)
+                }
+                append("\n")
+            }
+        }
+    }.trim()
+}
+
+private fun previewDocumentMimeTypes(): Array<String> = arrayOf(
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "image/*",
+    "text/plain",
+)
+
+private fun android.content.ContentResolver.queryDisplayName(uri: android.net.Uri): String? {
+    val projection = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
+    return query(uri, projection, null, null, null)?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+        if (nameIndex >= 0 && cursor.moveToFirst()) cursor.getString(nameIndex) else null
+    }
+}
+
+private fun formatPreviewHistoryTime(updatedAtMillis: Long): String {
+    if (updatedAtMillis <= 0L) return "刚刚"
+    val now = System.currentTimeMillis()
+    val diff = now - updatedAtMillis
+    return when {
+        diff < 60_000L -> "刚刚"
+        diff < 3_600_000L -> "${diff / 60_000L} 分钟前"
+        diff < 24 * 3_600_000L -> "${diff / 3_600_000L} 小时前"
+        else -> SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(updatedAtMillis))
     }
 }

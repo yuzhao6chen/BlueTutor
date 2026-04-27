@@ -1,5 +1,6 @@
 package com.bluetutor.android.feature.solve.data
 
+import com.bluetutor.android.core.network.BackendEndpointConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -18,8 +19,6 @@ data class SolveOcrResult(
 )
 
 object SolveOcrApiClient {
-    private const val emulatorBaseUrl = "http://10.0.2.2:8000"
-    private const val lanBaseUrl = "http://10.1.2.120:8000"
     private const val defaultUserId = "android_solve_user"
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -102,7 +101,7 @@ object SolveOcrApiClient {
             buildString {
                 append("暂时无法连接 OCR 服务。已尝试地址：")
                 append(attempted)
-                append("。请确认后端已在 0.0.0.0:8000 启动。")
+                append("。请确认后端服务已启动且当前网络可达。")
                 if (detail != null) {
                     append("\n")
                     append(detail)
@@ -112,10 +111,6 @@ object SolveOcrApiClient {
     }
 
     private fun candidateBaseUrls(): List<String> {
-        val ordered = mutableListOf<String>()
-        cachedBaseUrl?.let(ordered::add)
-        ordered.add(emulatorBaseUrl)
-        ordered.add(lanBaseUrl)
-        return ordered.distinct()
+        return BackendEndpointConfig.candidateBaseUrls(cachedBaseUrl)
     }
 }

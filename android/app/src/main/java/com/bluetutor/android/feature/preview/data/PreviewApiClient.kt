@@ -1,12 +1,14 @@
 package com.bluetutor.android.feature.preview.data
 
-import android.os.Build
+import com.bluetutor.android.core.network.BackendEndpointConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import okhttp3.MultipartBody
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -38,6 +40,33 @@ data class PreviewApiChatMessage(
     val content: String,
 )
 
+data class PreviewApiHandoutBlock(
+    val id: String,
+    val type: String,
+    val title: String,
+    val text: String,
+    val supportingText: String,
+    val sectionTitle: String,
+)
+
+data class PreviewApiGeneratedHandout(
+    val articleTitle: String,
+    val articleSubtitle: String,
+    val introduction: String,
+    val blocks: List<PreviewApiHandoutBlock>,
+    val footerPrompt: String,
+)
+
+data class PreviewApiDocumentHandoutResult(
+    val fileId: String,
+    val fileName: String,
+    val fileExtension: String,
+    val summary: String,
+    val knowledgePoints: List<PreviewApiKnowledgePoint>,
+    val handout: PreviewApiGeneratedHandout,
+    val cacheHit: Boolean,
+)
+
 sealed interface PreviewApiChatStreamEvent {
     data class Token(val token: String) : PreviewApiChatStreamEvent
 
@@ -50,16 +79,14 @@ sealed interface PreviewApiChatStreamEvent {
 class PreviewApiException(message: String) : IOException(message)
 
 object PreviewApiClient {
-    private const val emulatorBaseUrl = "http://10.0.2.2:8000"
-    private const val lanBaseUrl = "http://10.1.2.120:8000"
     private const val demoUserId = "android_phase1_user"
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     @Volatile
     private var cachedBaseUrl: String? = null
     private val client = OkHttpClient.Builder()
-        .connectTimeout(4, TimeUnit.SECONDS)
-        .readTimeout(45, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(240, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
     suspend fun fetchQuickTopicPreview(
@@ -122,6 +149,68 @@ object PreviewApiClient {
         PreviewApiChatResult(
             reply = data.optString("reply"),
             followUpQuestions = parseFollowUpQuestions(data),
+        )
+    }
+
+    suspend fun uploadDocumentHandout(
+        fileName: String,
+        fileBytes: ByteArray,
+        mimeType: String?,
+    ): PreviewApiDocumentHandoutResult = withContext(Dispatchers.IO) {
+        val root = postMultipart(
+            path = "/api/preview/documents/upload-handout",
+            fields = mapOf("user_id" to demoUserId),
+            fileFieldName = "file",
+            fileName = fileName,
+            fileBytes = fileBytes,
+            mimeType = mimeType,
+        )
+        val data = root.optJSONObject("data")
+            ?: throw PreviewApiException("讲义上传接口返回缺少 data 字段")
+        val knowledgePointsJson = data.optJSONArray("knowledge_points") ?: JSONArray()
+        val handoutJson = data.optJSONObject("handout") ?: JSONObject()
+        val blocksJson = handoutJson.optJSONArray("blocks") ?: JSONArray()
+
+        PreviewApiDocumentHandoutResult(
+            fileId = data.optString("file_id"),
+            fileName = data.optString("file_name"),
+            fileExtension = data.optString("file_extension"),
+            summary = data.optString("summary"),
+            knowledgePoints = buildList {
+                for (index in 0 until knowledgePointsJson.length()) {
+                    val item = knowledgePointsJson.optJSONObject(index) ?: continue
+                    add(
+                        PreviewApiKnowledgePoint(
+                            id = item.optString("id"),
+                            title = item.optString("title"),
+                            description = item.optString("description"),
+                            confidence = item.optDouble("confidence", 0.0).toFloat(),
+                        ),
+                    )
+                }
+            },
+            handout = PreviewApiGeneratedHandout(
+                articleTitle = handoutJson.optString("article_title"),
+                articleSubtitle = handoutJson.optString("article_subtitle"),
+                introduction = handoutJson.optString("introduction"),
+                blocks = buildList {
+                    for (index in 0 until blocksJson.length()) {
+                        val item = blocksJson.optJSONObject(index) ?: continue
+                        add(
+                            PreviewApiHandoutBlock(
+                                id = item.optString("id"),
+                                type = item.optString("type"),
+                                title = item.optString("title"),
+                                text = item.optString("text"),
+                                supportingText = item.optString("supporting_text"),
+                                sectionTitle = item.optString("section_title"),
+                            ),
+                        )
+                    }
+                },
+                footerPrompt = handoutJson.optString("footer_prompt"),
+            ),
+            cacheHit = data.optBoolean("cache_hit", false),
         )
     }
 
@@ -211,7 +300,76 @@ object PreviewApiClient {
             buildString {
                 append("暂时无法连接专题预习服务。已尝试地址：")
                 append(attempted)
-                append("。请确认后端已在 0.0.0.0:8000 启动。")
+                append("。请确认后端服务已启动且当前网络可达。")
+                if (detail != null) {
+                    append("\n")
+                    append(detail)
+                }
+            },
+        )
+    }
+
+    private fun postMultipart(
+        path: String,
+        fields: Map<String, String>,
+        fileFieldName: String,
+        fileName: String,
+        fileBytes: ByteArray,
+        mimeType: String?,
+    ): JSONObject {
+        var lastNetworkError: IOException? = null
+
+        for (baseUrl in candidateBaseUrls()) {
+            val multipartBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .apply {
+                    fields.forEach { (key, value) -> addFormDataPart(key, value) }
+                    addFormDataPart(
+                        fileFieldName,
+                        fileName,
+                        fileBytes.toRequestBody((mimeType ?: "application/octet-stream").toMediaTypeOrNull()),
+                    )
+                }
+                .build()
+
+            val request = Request.Builder()
+                .url(baseUrl + path)
+                .post(multipartBody)
+                .build()
+
+            try {
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (body.isBlank()) {
+                        throw PreviewApiException("预习服务返回空响应")
+                    }
+
+                    val root = JSONObject(body)
+                    val code = root.optInt("code", -1)
+                    if (!response.isSuccessful || code != 0) {
+                        val message = root.optString("message").ifBlank {
+                            "预习服务请求失败（HTTP ${response.code}）"
+                        }
+                        throw PreviewApiException(message)
+                    }
+
+                    cachedBaseUrl = baseUrl
+                    return root
+                }
+            } catch (error: PreviewApiException) {
+                throw error
+            } catch (error: IOException) {
+                lastNetworkError = error
+            }
+        }
+
+        val attempted = candidateBaseUrls().joinToString(separator = "、")
+        val detail = lastNetworkError?.message?.takeIf { it.isNotBlank() }
+        throw PreviewApiException(
+            buildString {
+                append("暂时无法连接上传讲义服务。已尝试地址：")
+                append(attempted)
+                append("。请确认后端服务已启动且当前网络可达。")
                 if (detail != null) {
                     append("\n")
                     append(detail)
@@ -258,7 +416,7 @@ object PreviewApiClient {
             buildString {
                 append("暂时无法连接专题预习服务。已尝试地址：")
                 append(attempted)
-                append("。请确认后端已在 0.0.0.0:8000 启动。")
+                append("。请确认后端服务已启动且当前网络可达。")
                 if (detail != null) {
                     append("\n")
                     append(detail)
@@ -377,32 +535,6 @@ object PreviewApiClient {
     }
 
     private fun candidateBaseUrls(): List<String> {
-        val preferred = if (isProbablyEmulator()) {
-            listOf(emulatorBaseUrl, lanBaseUrl)
-        } else {
-            listOf(lanBaseUrl)
-        }
-        val cached = cachedBaseUrl
-        return buildList {
-            if (!cached.isNullOrBlank()) {
-                add(cached)
-            }
-            preferred.forEach { baseUrl ->
-                if (!contains(baseUrl)) {
-                    add(baseUrl)
-                }
-            }
-        }
-    }
-
-    private fun isProbablyEmulator(): Boolean {
-        return Build.FINGERPRINT.startsWith("generic") ||
-            Build.FINGERPRINT.startsWith("unknown") ||
-            Build.MODEL.contains("google_sdk") ||
-            Build.MODEL.contains("Emulator") ||
-            Build.MODEL.contains("Android SDK built for x86") ||
-            Build.MANUFACTURER.contains("Genymotion") ||
-            Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic") ||
-            Build.PRODUCT.contains("sdk")
+        return BackendEndpointConfig.candidateBaseUrls(cachedBaseUrl)
     }
 }

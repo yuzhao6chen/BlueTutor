@@ -50,6 +50,7 @@ tmp/
 temp/
 backend/data/preview_logs/
 backend/data/preview_cache/
+backend/data/shared_doc_parse_cache/
 backend/app/guide/data
 backend/app/mistakes/data
 docs/develop

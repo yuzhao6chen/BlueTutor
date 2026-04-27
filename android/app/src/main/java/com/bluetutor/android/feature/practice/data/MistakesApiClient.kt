@@ -1,6 +1,6 @@
 package com.bluetutor.android.feature.practice.data
 
-import android.os.Build
+import com.bluetutor.android.core.network.BackendEndpointConfig
 import com.bluetutor.android.feature.solve.data.GuideReportChainItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -239,8 +239,6 @@ data class MistakeReportIngestResult(
 )
 
 object MistakesApiClient {
-    private const val emulatorBaseUrl = "http://10.0.2.2:8000"
-    private const val lanBaseUrl = "http://10.1.2.120:8000"
     private const val demoUserId = "android_phase1_user"
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -598,7 +596,7 @@ object MistakesApiClient {
         return buildString {
             append("暂时无法连接错题服务。已尝试地址：")
             append(attempted)
-            append("。请确认后端已在 0.0.0.0:8000 启动。")
+            append("。请确认后端服务已启动且当前网络可达。")
             if (detail != null) {
                 append("\n")
                 append(detail)
@@ -607,27 +605,7 @@ object MistakesApiClient {
     }
 
     private fun candidateBaseUrls(): List<String> {
-        val preferred = if (isProbablyEmulator()) {
-            listOf(emulatorBaseUrl, lanBaseUrl)
-        } else {
-            listOf(lanBaseUrl)
-        }
-        val cached = cachedBaseUrl
-        return buildList {
-            if (!cached.isNullOrBlank()) add(cached)
-            preferred.forEach { if (!contains(it)) add(it) }
-        }
-    }
-
-    private fun isProbablyEmulator(): Boolean {
-        return Build.FINGERPRINT.startsWith("generic") ||
-            Build.FINGERPRINT.startsWith("unknown") ||
-            Build.MODEL.contains("google_sdk") ||
-            Build.MODEL.contains("Emulator") ||
-            Build.MODEL.contains("Android SDK built for x86") ||
-            Build.MANUFACTURER.contains("Genymotion") ||
-            Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic") ||
-            Build.PRODUCT.contains("sdk")
+        return BackendEndpointConfig.candidateBaseUrls(cachedBaseUrl)
     }
 
     private fun parseHomeSummary(data: JSONObject): MistakeHomeSummaryResult {
