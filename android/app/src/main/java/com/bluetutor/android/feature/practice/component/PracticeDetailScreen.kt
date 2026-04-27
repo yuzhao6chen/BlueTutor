@@ -49,6 +49,7 @@ import com.bluetutor.android.feature.practice.data.MistakeLectureSectionResult
 import com.bluetutor.android.feature.practice.data.MistakeReviewStepResult
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
 import com.bluetutor.android.feature.practice.data.PracticeLocalCache
+import com.bluetutor.android.feature.practice.data.withRecoveredReport
 import com.bluetutor.android.ui.theme.BluetutorGradients
 import kotlinx.coroutines.launch
 
@@ -75,7 +76,13 @@ fun PracticeDetailScreen(
     LaunchedEffect(reportId) {
         onBottomBarVisibilityChange(false)
         try {
-            val lecture = MistakesApiClient.getLecture(reportId)
+            val detail = withRecoveredReport(context, reportId) { resolvedReportId ->
+                MistakesApiClient.getReportDetail(resolvedReportId)
+            }
+            PracticeLocalCache.saveReportDetail(context, detail)
+            val lecture = withRecoveredReport(context, reportId) { resolvedReportId ->
+                MistakesApiClient.getLecture(resolvedReportId)
+            }
             PracticeLocalCache.saveLecture(context, lecture)
             state = state.copy(isLoading = false, lecture = lecture)
         } catch (e: Exception) {
@@ -116,7 +123,13 @@ fun PracticeDetailScreen(
                     scope.launch {
                         state = state.copy(isLoading = true, error = null)
                         try {
-                            val lecture = MistakesApiClient.getLecture(reportId)
+                            val detail = withRecoveredReport(context, reportId) { resolvedReportId ->
+                                MistakesApiClient.getReportDetail(resolvedReportId)
+                            }
+                            PracticeLocalCache.saveReportDetail(context, detail)
+                            val lecture = withRecoveredReport(context, reportId) { resolvedReportId ->
+                                MistakesApiClient.getLecture(resolvedReportId)
+                            }
                             PracticeLocalCache.saveLecture(context, lecture)
                             state = state.copy(isLoading = false, lecture = lecture)
                         } catch (e: Exception) {

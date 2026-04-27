@@ -246,9 +246,9 @@ object MistakesApiClient {
     private var cachedBaseUrl: String? = null
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(4, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(180, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
     suspend fun getHomeSummary(userId: String? = null): MistakeHomeSummaryResult =
@@ -485,6 +485,68 @@ object MistakesApiClient {
             reportTitle = data.optString("report_title"),
         )
     }
+
+    suspend fun ingestCachedReport(detail: MistakeReportDetailResult): MistakeReportIngestResult =
+        withContext(Dispatchers.IO) {
+            val payload = JSONObject()
+                .put("user_id", detail.userId.ifBlank { demoUserId })
+                .put(
+                    "report",
+                    JSONObject()
+                        .put(
+                            "problem",
+                            JSONObject()
+                                .put("raw_problem", detail.problem.rawProblem)
+                                .put("known_conditions", JSONArray(detail.problem.knownConditions))
+                                .put("goal", detail.problem.goal)
+                                .put("answer", detail.problem.answer),
+                        )
+                        .put("knowledge_tags", JSONArray(detail.knowledgeTags))
+                        .put(
+                            "thinking_chain",
+                            JSONArray().apply {
+                                detail.thinkingChain.forEach { item ->
+                                    put(
+                                        JSONObject()
+                                            .put("node_id", item.nodeId)
+                                            .put("content", item.content)
+                                            .put("status", item.status.ifBlank { "unknown" })
+                                            .put("parent_id", item.parentId)
+                                            .put("error_history", JSONArray(item.errorHistory)),
+                                    )
+                                }
+                            },
+                        )
+                        .put(
+                            "error_profile",
+                            JSONArray().apply {
+                                detail.errorProfile.forEach { item ->
+                                    put(
+                                        JSONObject()
+                                            .put("error_type", item.errorType)
+                                            .put("detail", item.detail),
+                                    )
+                                }
+                            },
+                        )
+                        .put(
+                            "independence_evaluation",
+                            JSONObject()
+                                .put("level", detail.independenceEvaluation.level)
+                                .put("detail", detail.independenceEvaluation.detail),
+                        )
+                        .put("solution", detail.solution),
+                )
+                .put("report_title", detail.reportTitle)
+
+            val root = postJson("/api/mistakes/report/ingest", payload)
+            val data = root.optJSONObject("data")
+                ?: throw MistakesApiException("错题入库接口返回缺少 data 字段")
+            MistakeReportIngestResult(
+                reportId = data.optString("report_id"),
+                reportTitle = data.optString("report_title"),
+            )
+        }
 
     private fun getJson(path: String): JSONObject {
         var lastNetworkError: IOException? = null

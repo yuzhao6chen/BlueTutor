@@ -218,6 +218,20 @@ fun SolveRoute(
         )
     }
 
+    fun shouldRecoverGuideSession(error: Throwable): Boolean {
+        return error.message.orEmpty().contains("会话不存在")
+    }
+
+    suspend fun recreateGuideSessionFromSnapshot(snapshot: SolveSessionCacheSnapshot): String {
+        val rebuiltSessionId = GuideApiClient.createSession(snapshot.problemText)
+        snapshot.dialogueHistory
+            .filter { it.role == "student" && it.content.isNotBlank() }
+            .forEach { message ->
+                GuideApiClient.runTurn(rebuiltSessionId, message.content)
+            }
+        return rebuiltSessionId
+    }
+
     fun clearArtifactStates() {
         reportState = SolveArtifactState()
         solutionState = SolveArtifactState()
@@ -374,7 +388,7 @@ fun SolveRoute(
         }
     }
 
-    suspend fun refreshWorkbench(sessionId: String, preserveDraft: Boolean = true) {
+    suspend fun refreshWorkbench(sessionId: String, preserveDraft: Boolean = true, allowRecovery: Boolean = true) {
         val draft = if (preserveDraft) guideState.draftInput else ""
         guideState = guideState.copy(isWorkbenchLoading = true, error = null, draftInput = draft)
         try {
@@ -401,6 +415,29 @@ fun SolveRoute(
             guideState = nextState
             persistGuideSessionSnapshot(nextState)
         } catch (e: Exception) {
+            guideState = guideState.copy(
+                isSubmitting = false,
+                isWorkbenchLoading = false,
+                error = e.message ?: "加载解题工作台失败，请稍后重试",
+            )
+            if (allowRecovery && shouldRecoverGuideSession(e)) {
+                val snapshot = SolveLocalCache.readSessionCache(context, sessionId)
+                if (snapshot != null) {
+                    try {
+                        val rebuiltSessionId = recreateGuideSessionFromSnapshot(snapshot)
+                        val rebuiltState = restoreGuideState(snapshot).copy(
+                            sessionId = rebuiltSessionId,
+                            draftInput = draft,
+                            isWorkbenchLoading = true,
+                        )
+                        guideState = rebuiltState
+                        refreshWorkbench(rebuiltSessionId, preserveDraft = true, allowRecovery = false)
+                        return
+                    } catch (_: Exception) {
+                        // Fall through to the original error below if rebuilding also fails.
+                    }
+                }
+            }
             guideState = guideState.copy(
                 isSubmitting = false,
                 isWorkbenchLoading = false,

@@ -41,6 +41,7 @@ import com.bluetutor.android.feature.practice.PracticeRedoState
 import com.bluetutor.android.feature.practice.data.MistakeRecommendationOptionResult
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
 import com.bluetutor.android.feature.practice.data.PracticeLocalCache
+import com.bluetutor.android.feature.practice.data.withRecoveredReport
 import com.bluetutor.android.feature.practice.difficultyColor
 import com.bluetutor.android.feature.practice.difficultyDisplayName
 import com.bluetutor.android.ui.theme.BluetutorGradients
@@ -70,7 +71,9 @@ fun PracticeRecommendationScreen(
     LaunchedEffect(reportId, recommendationType) {
         onBottomBarVisibilityChange(false)
         try {
-            val rec = MistakesApiClient.generateRecommendation(reportId, recommendationType = recommendationType)
+            val rec = withRecoveredReport(context, reportId) { resolvedReportId ->
+                MistakesApiClient.generateRecommendation(resolvedReportId, recommendationType = recommendationType)
+            }
             PracticeLocalCache.saveRecommendation(context, reportId, recommendationType, rec)
             state = state.copy(isLoading = false, recommendation = rec)
         } catch (e: Exception) {
@@ -96,7 +99,9 @@ fun PracticeRecommendationScreen(
                     scope.launch {
                         state = state.copy(isLoading = true, error = null)
                         try {
-                            val rec = MistakesApiClient.generateRecommendation(reportId, recommendationType = recommendationType)
+                            val rec = withRecoveredReport(context, reportId) { resolvedReportId ->
+                                MistakesApiClient.generateRecommendation(resolvedReportId, recommendationType = recommendationType)
+                            }
                             PracticeLocalCache.saveRecommendation(context, reportId, recommendationType, rec)
                             state = state.copy(isLoading = false, recommendation = rec)
                         } catch (e: Exception) {

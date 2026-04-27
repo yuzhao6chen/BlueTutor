@@ -7,6 +7,25 @@ import org.json.JSONObject
 object PracticeLocalCache {
     private const val preferencesName = "practice_local_cache_v1"
 
+    fun readReportDetail(context: Context, reportId: String): MistakeReportDetailResult? {
+        val raw = readValue(context, reportDetailKey(reportId)) ?: return null
+        return runCatching {
+            parseReportDetail(JSONObject(raw))
+        }.getOrNull()
+    }
+
+    fun saveReportDetail(context: Context, detail: MistakeReportDetailResult) {
+        writeValue(context, reportDetailKey(detail.reportId), writeReportDetail(detail).toString())
+    }
+
+    fun readReportAlias(context: Context, reportId: String): String? {
+        return readValue(context, reportAliasKey(reportId))?.trim()?.ifEmpty { null }
+    }
+
+    fun saveReportAlias(context: Context, originalReportId: String, currentReportId: String) {
+        writeValue(context, reportAliasKey(originalReportId), currentReportId)
+    }
+
     fun readHomeSummary(context: Context): MistakeHomeSummaryResult? {
         val raw = readValue(context, homeSummaryKey) ?: return null
         return runCatching {
@@ -246,6 +265,119 @@ object PracticeLocalCache {
             )
             .put("keyTakeaways", JSONArray().apply { lecture.keyTakeaways.forEach(::put) })
             .put("createdAt", lecture.createdAt)
+    }
+
+    private fun writeReportDetail(detail: MistakeReportDetailResult): JSONObject {
+        return JSONObject()
+            .put("reportId", detail.reportId)
+            .put("userId", detail.userId)
+            .put("reportTitle", detail.reportTitle)
+            .put("status", detail.status)
+            .put("knowledgeTags", JSONArray().apply { detail.knowledgeTags.forEach(::put) })
+            .put("primaryErrorType", detail.primaryErrorType)
+            .put("independenceLevel", detail.independenceLevel)
+            .put("hasSolution", detail.hasSolution)
+            .put("solutionPreview", detail.solutionPreview)
+            .put("createdAt", detail.createdAt)
+            .put("problemPreview", detail.problemPreview)
+            .put(
+                "problem",
+                JSONObject()
+                    .put("rawProblem", detail.problem.rawProblem)
+                    .put("knownConditions", JSONArray().apply { detail.problem.knownConditions.forEach(::put) })
+                    .put("goal", detail.problem.goal)
+                    .put("answer", detail.problem.answer),
+            )
+            .put(
+                "thinkingChain",
+                JSONArray().apply {
+                    detail.thinkingChain.forEach { node ->
+                        put(
+                            JSONObject()
+                                .put("nodeId", node.nodeId)
+                                .put("content", node.content)
+                                .put("status", node.status)
+                                .put("parentId", node.parentId)
+                                .put("errorHistory", JSONArray().apply { node.errorHistory.forEach(::put) }),
+                        )
+                    }
+                },
+            )
+            .put(
+                "errorProfile",
+                JSONArray().apply {
+                    detail.errorProfile.forEach { item ->
+                        put(
+                            JSONObject()
+                                .put("errorType", item.errorType)
+                                .put("detail", item.detail),
+                        )
+                    }
+                },
+            )
+            .put(
+                "independenceEvaluation",
+                JSONObject()
+                    .put("level", detail.independenceEvaluation.level)
+                    .put("detail", detail.independenceEvaluation.detail),
+            )
+            .put("solution", detail.solution)
+    }
+
+    private fun parseReportDetail(root: JSONObject): MistakeReportDetailResult {
+        val problemRoot = root.optJSONObject("problem") ?: JSONObject()
+        val thinkingChainRoot = root.optJSONArray("thinkingChain") ?: JSONArray()
+        val errorProfileRoot = root.optJSONArray("errorProfile") ?: JSONArray()
+        val independenceRoot = root.optJSONObject("independenceEvaluation") ?: JSONObject()
+        return MistakeReportDetailResult(
+            reportId = root.optString("reportId"),
+            userId = root.optString("userId"),
+            reportTitle = root.optString("reportTitle"),
+            status = root.optString("status"),
+            knowledgeTags = readStringList(root.optJSONArray("knowledgeTags")),
+            primaryErrorType = root.optString("primaryErrorType"),
+            independenceLevel = root.optString("independenceLevel"),
+            hasSolution = root.optBoolean("hasSolution", false),
+            solutionPreview = root.optString("solutionPreview"),
+            createdAt = root.optString("createdAt"),
+            problemPreview = root.optString("problemPreview"),
+            problem = MistakeProblemResult(
+                rawProblem = problemRoot.optString("rawProblem"),
+                knownConditions = readStringList(problemRoot.optJSONArray("knownConditions")),
+                goal = problemRoot.optString("goal"),
+                answer = problemRoot.optString("answer"),
+            ),
+            thinkingChain = buildList {
+                for (index in 0 until thinkingChainRoot.length()) {
+                    val item = thinkingChainRoot.optJSONObject(index) ?: continue
+                    add(
+                        MistakeThinkingNodeResult(
+                            nodeId = item.optString("nodeId"),
+                            content = item.optString("content"),
+                            status = item.optString("status"),
+                            parentId = item.optString("parentId").ifBlank { null },
+                            errorHistory = readStringList(item.optJSONArray("errorHistory")),
+                        ),
+                    )
+                }
+            },
+            errorProfile = buildList {
+                for (index in 0 until errorProfileRoot.length()) {
+                    val item = errorProfileRoot.optJSONObject(index) ?: continue
+                    add(
+                        MistakeErrorProfileResult(
+                            errorType = item.optString("errorType"),
+                            detail = item.optString("detail"),
+                        ),
+                    )
+                }
+            },
+            independenceEvaluation = MistakeIndependenceResult(
+                level = independenceRoot.optString("level"),
+                detail = independenceRoot.optString("detail"),
+            ),
+            solution = root.optString("solution").ifBlank { null },
+        )
     }
 
     private fun parseLecture(root: JSONObject): MistakeLectureResult {
@@ -514,6 +646,10 @@ object PracticeLocalCache {
     private fun timelineKey(status: String?, knowledgeTag: String?): String {
         return "timeline_${status ?: "all"}_${knowledgeTag ?: "all"}"
     }
+
+    private fun reportDetailKey(reportId: String): String = "report_detail_$reportId"
+
+    private fun reportAliasKey(reportId: String): String = "report_alias_$reportId"
 
     private fun lectureKey(reportId: String): String = "lecture_$reportId"
 

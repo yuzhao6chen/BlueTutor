@@ -53,6 +53,7 @@ import com.bluetutor.android.feature.practice.data.MistakeDialogueMessageResult
 import com.bluetutor.android.feature.practice.data.MistakeDialogueSessionResult
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
 import com.bluetutor.android.feature.practice.data.PracticeLocalCache
+import com.bluetutor.android.feature.practice.data.withRecoveredReport
 import com.bluetutor.android.feature.practice.masteryVerdictDisplayName
 import com.bluetutor.android.ui.theme.BluetutorGradients
 import kotlinx.coroutines.launch
@@ -80,7 +81,9 @@ fun PracticeDialogueScreen(
     LaunchedEffect(reportId) {
         onBottomBarVisibilityChange(false)
         try {
-            val session = MistakesApiClient.startDialogueSession(reportId)
+            val session = withRecoveredReport(context, reportId) { resolvedReportId ->
+                MistakesApiClient.startDialogueSession(resolvedReportId)
+            }
             PracticeLocalCache.saveDialogueSession(context, session)
             state = state.copy(isLoading = false, session = session)
         } catch (e: Exception) {
@@ -129,7 +132,9 @@ fun PracticeDialogueScreen(
                     scope.launch {
                         state = state.copy(isLoading = true, error = null)
                         try {
-                            val session = MistakesApiClient.startDialogueSession(reportId)
+                            val session = withRecoveredReport(context, reportId) { resolvedReportId ->
+                                MistakesApiClient.startDialogueSession(resolvedReportId)
+                            }
                             PracticeLocalCache.saveDialogueSession(context, session)
                             state = state.copy(isLoading = false, session = session)
                         } catch (e: Exception) {

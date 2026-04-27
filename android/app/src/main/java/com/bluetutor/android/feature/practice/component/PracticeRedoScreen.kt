@@ -58,6 +58,7 @@ import com.bluetutor.android.feature.practice.data.MistakeRedoSessionResult
 import com.bluetutor.android.feature.practice.data.MistakeRedoTurnResult
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
 import com.bluetutor.android.feature.practice.data.PracticeLocalCache
+import com.bluetutor.android.feature.practice.data.withRecoveredReport
 import com.bluetutor.android.feature.practice.resultColor
 import com.bluetutor.android.feature.practice.resultDisplayName
 import com.bluetutor.android.feature.practice.stageDisplayName
@@ -88,7 +89,9 @@ fun PracticeRedoScreen(
     LaunchedEffect(reportId) {
         onBottomBarVisibilityChange(false)
         try {
-            val session = MistakesApiClient.startRedoSession(reportId)
+            val session = withRecoveredReport(context, reportId) { resolvedReportId ->
+                MistakesApiClient.startRedoSession(resolvedReportId)
+            }
             PracticeLocalCache.saveRedoSession(context, session)
             state = state.copy(isLoading = false, session = session)
         } catch (e: Exception) {
@@ -114,7 +117,9 @@ fun PracticeRedoScreen(
                     scope.launch {
                         state = state.copy(isLoading = true, error = null)
                         try {
-                            val session = MistakesApiClient.startRedoSession(reportId)
+                            val session = withRecoveredReport(context, reportId) { resolvedReportId ->
+                                MistakesApiClient.startRedoSession(resolvedReportId)
+                            }
                             PracticeLocalCache.saveRedoSession(context, session)
                             state = state.copy(isLoading = false, session = session)
                         } catch (e: Exception) {
@@ -132,7 +137,9 @@ fun PracticeRedoScreen(
                         onMarkMastered = {
                             scope.launch {
                                 try {
-                                    MistakesApiClient.updateReportStatus(reportId, "mastered")
+                                    withRecoveredReport(context, reportId) { resolvedReportId ->
+                                        MistakesApiClient.updateReportStatus(resolvedReportId, "mastered")
+                                    }
                                     onBack()
                                 } catch (_: Exception) {}
                             }
