@@ -56,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,12 +82,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.viewinterop.AndroidView
+import com.bluetutor.android.core.designsystem.component.BtSectionTitle
 import com.bluetutor.android.feature.practice.data.MistakesApiClient
 import com.bluetutor.android.feature.solve.data.GuideApiClient
 import com.bluetutor.android.feature.solve.data.GuideDialogueMessage
 import com.bluetutor.android.feature.solve.data.GuideReportResult
 import com.bluetutor.android.feature.solve.data.GuideThinkingNodeResult
 import com.bluetutor.android.feature.solve.data.GuideVisualizationResult
+import com.bluetutor.android.feature.solve.data.SolveHistoryEntryUiModel
+import com.bluetutor.android.feature.solve.data.SolveLocalCache
+import com.bluetutor.android.feature.solve.data.SolveSessionCacheSnapshot
 import com.bluetutor.android.feature.solve.component.SolveTeacherIllustration
 import com.bluetutor.android.feature.solve.data.SolveOcrApiClient
 import com.bluetutor.android.ui.theme.BluetutorSpacing
@@ -100,6 +105,9 @@ import io.noties.markwon.ext.latex.JLatexMathPlugin
 import io.noties.markwon.html.HtmlPlugin
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Suppress("DEPRECATION")
 @Composable
@@ -108,7 +116,8 @@ fun SolveRoute(
     onBottomBarVisibilityChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val uiState = remember { solveRouteMockUiState() }
+    var recentHistory by remember { mutableStateOf(SolveLocalCache.readHistory(context)) }
+    val uiState = solveRouteMockUiState(recentHistory)
     var guideState by remember { mutableStateOf(SolveGuideConversationState()) }
     var reportState by remember { mutableStateOf(SolveArtifactState<GuideReportResult>()) }
     var solutionState by remember { mutableStateOf(SolveArtifactState<String>()) }
@@ -130,6 +139,83 @@ fun SolveRoute(
         onDispose {
             onBottomBarVisibilityChange(true)
         }
+    }
+
+    fun refreshRecentHistory() {
+        recentHistory = SolveLocalCache.readHistory(context)
+    }
+
+    fun buildHistoryEntry(
+        state: SolveGuideConversationState,
+        updatedAtMillis: Long,
+    ): SolveHistoryEntryUiModel? {
+        val sessionId = state.sessionId ?: return null
+        val title = state.problemText.trim().ifBlank { "最近引导解题" }
+        val latestTutorPrompt = state.dialogueHistory.lastOrNull { it.role == "tutor" }?.content?.trim().orEmpty()
+        val subtitle = when {
+            state.isSolved -> "已完成，可继续回看完整思路和工作台记录。"
+            state.draftInput.isNotBlank() -> "上次输入：${state.draftInput.trim()}"
+            latestTutorPrompt.isNotBlank() -> latestTutorPrompt
+            state.goal.isNotBlank() -> "目标：${state.goal}"
+            else -> "继续回到工作台，把这道题一步步做完。"
+        }
+        return SolveHistoryEntryUiModel(
+            sessionId = sessionId,
+            title = title,
+            subtitle = subtitle,
+            statusTag = if (state.isSolved) "已完成" else "进行中",
+            updatedAtMillis = updatedAtMillis,
+            isSolved = state.isSolved,
+        )
+    }
+
+    fun persistGuideSessionSnapshot(state: SolveGuideConversationState) {
+        val sessionId = state.sessionId ?: return
+        val updatedAtMillis = System.currentTimeMillis()
+        SolveLocalCache.saveSessionCache(
+            context = context,
+            snapshot = SolveSessionCacheSnapshot(
+                sessionId = sessionId,
+                problemText = state.problemText,
+                parsedKnownConditions = state.parsedKnownConditions,
+                goal = state.goal,
+                referenceAnswer = state.referenceAnswer,
+                dialogueHistory = state.dialogueHistory,
+                thinkingTree = state.thinkingTree,
+                currentStuckNodeId = state.currentStuckNodeId,
+                stuckCount = state.stuckCount,
+                lastUpdatedNodeId = state.lastUpdatedNodeId,
+                isSolved = state.isSolved,
+                draftInput = state.draftInput,
+                updatedAtMillis = updatedAtMillis,
+            ),
+        )
+        buildHistoryEntry(state, updatedAtMillis)?.let { entry ->
+            SolveLocalCache.upsertHistoryEntry(context, entry)
+            refreshRecentHistory()
+        }
+    }
+
+    fun restoreGuideState(snapshot: SolveSessionCacheSnapshot): SolveGuideConversationState {
+        return SolveGuideConversationState(
+            problemText = snapshot.problemText,
+            sessionId = snapshot.sessionId,
+            isSubmitting = false,
+            isRecognizingImage = false,
+            error = null,
+            parsedKnownConditions = snapshot.parsedKnownConditions,
+            goal = snapshot.goal,
+            referenceAnswer = snapshot.referenceAnswer,
+            dialogueHistory = snapshot.dialogueHistory,
+            thinkingTree = snapshot.thinkingTree,
+            currentStuckNodeId = snapshot.currentStuckNodeId,
+            stuckCount = snapshot.stuckCount,
+            lastUpdatedNodeId = snapshot.lastUpdatedNodeId,
+            isSolved = snapshot.isSolved,
+            draftInput = snapshot.draftInput,
+            isWorkbenchLoading = false,
+            streamingTutorMarkdown = "",
+        )
     }
 
     fun clearArtifactStates() {
@@ -294,7 +380,7 @@ fun SolveRoute(
         try {
             val detail = GuideApiClient.getSessionDetail(sessionId)
             val thinkingTree = GuideApiClient.getThinkingTree(sessionId)
-            guideState = guideState.copy(
+            val nextState = guideState.copy(
                 problemText = detail.rawProblem,
                 sessionId = detail.sessionId,
                 parsedKnownConditions = detail.parsedProblem.knownConditions,
@@ -312,12 +398,28 @@ fun SolveRoute(
                 streamingTutorMarkdown = "",
                 error = null,
             )
+            guideState = nextState
+            persistGuideSessionSnapshot(nextState)
         } catch (e: Exception) {
             guideState = guideState.copy(
                 isSubmitting = false,
                 isWorkbenchLoading = false,
                 error = e.message ?: "加载解题工作台失败，请稍后重试",
             )
+        }
+    }
+
+    fun openHistoryEntry(entry: SolveHistoryEntryUiModel) {
+        clearArtifactStates()
+        val snapshot = SolveLocalCache.readSessionCache(context, entry.sessionId)
+        guideState = snapshot?.let(::restoreGuideState) ?: SolveGuideConversationState(
+            problemText = entry.title,
+            sessionId = entry.sessionId,
+            isWorkbenchLoading = true,
+        )
+        destination = SolveDestination.Workbench
+        scope.launch {
+            refreshWorkbench(entry.sessionId, preserveDraft = snapshot != null)
         }
     }
 
@@ -460,6 +562,7 @@ fun SolveRoute(
         onBackFromProblemConfirm = { destination = SolveDestination.Home },
         onBackFromWorkbench = { destination = SolveDestination.ProblemConfirm },
         onBackFromResult = { destination = SolveDestination.Workbench },
+        onBackFromHistory = { destination = SolveDestination.Home },
         onTakePhoto = ::startTakePhotoFlow,
         onPickFromAlbum = { albumLauncher.launch("image/*") },
         onManualInput = {
@@ -470,10 +573,14 @@ fun SolveRoute(
             clearWorkbenchState(it)
         },
         onWorkbenchInputChange = {
-            guideState = guideState.copy(draftInput = it, error = null)
+            val nextState = guideState.copy(draftInput = it, error = null)
+            guideState = nextState
+            persistGuideSessionSnapshot(nextState)
         },
         onWorkbenchQuickAction = {
-            guideState = guideState.copy(draftInput = it, error = null)
+            val nextState = guideState.copy(draftInput = it, error = null)
+            guideState = nextState
+            persistGuideSessionSnapshot(nextState)
         },
         onStartGuide = {
             val problemText = guideState.problemText.trim()
@@ -484,11 +591,13 @@ fun SolveRoute(
                     guideState = guideState.copy(isSubmitting = true, error = null)
                     try {
                         val sessionId = GuideApiClient.createSession(problemText)
-                        guideState = guideState.copy(
+                        val nextState = guideState.copy(
                             isSubmitting = false,
                             sessionId = sessionId,
                             isWorkbenchLoading = true,
                         )
+                        guideState = nextState
+                        persistGuideSessionSnapshot(nextState)
                         destination = SolveDestination.Workbench
                         refreshWorkbench(sessionId, preserveDraft = false)
                     } catch (e: Exception) {
@@ -552,6 +661,9 @@ fun SolveRoute(
         onReloadVisualization = {
             guideState.sessionId?.let { sessionId -> loadVisualization(sessionId, forceRefresh = true) }
         },
+        onOpenHistory = { destination = SolveDestination.History },
+        onOpenRecentHistoryEntry = ::openHistoryEntry,
+        historyEntries = recentHistory,
         modifier = modifier,
     )
 
@@ -614,6 +726,7 @@ private fun SolveScreen(
     onBackFromProblemConfirm: () -> Unit,
     onBackFromWorkbench: () -> Unit,
     onBackFromResult: () -> Unit,
+    onBackFromHistory: () -> Unit,
     onTakePhoto: () -> Unit,
     onPickFromAlbum: () -> Unit,
     onManualInput: () -> Unit,
@@ -628,6 +741,9 @@ private fun SolveScreen(
     onReloadReport: () -> Unit,
     onReloadSolution: () -> Unit,
     onReloadVisualization: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenRecentHistoryEntry: (SolveHistoryEntryUiModel) -> Unit,
+    historyEntries: List<SolveHistoryEntryUiModel>,
     modifier: Modifier = Modifier,
 ) {
     when (destination) {
@@ -636,6 +752,8 @@ private fun SolveScreen(
             onTakePhoto = onTakePhoto,
             onPickFromAlbum = onPickFromAlbum,
             onManualInput = onManualInput,
+            onOpenHistory = onOpenHistory,
+            onOpenRecentHistoryEntry = onOpenRecentHistoryEntry,
             modifier = modifier,
         )
 
@@ -693,6 +811,13 @@ private fun SolveScreen(
             onReload = onReloadVisualization,
             modifier = modifier,
         )
+
+        SolveDestination.History -> SolveHistoryScreen(
+            entries = historyEntries,
+            onBack = onBackFromHistory,
+            onOpenEntry = onOpenRecentHistoryEntry,
+            modifier = modifier,
+        )
     }
 }
 
@@ -702,6 +827,8 @@ private fun SolveAcquireScreen(
     onTakePhoto: () -> Unit,
     onPickFromAlbum: () -> Unit,
     onManualInput: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenRecentHistoryEntry: (SolveHistoryEntryUiModel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -760,6 +887,116 @@ private fun SolveAcquireScreen(
             uiState.tips.forEach { tip ->
                 SolveTipRow(tip = tip)
             }
+        }
+
+        Column(
+            modifier = Modifier.padding(horizontal = BluetutorSpacing.screenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            BtSectionTitle(
+                title = "最近学习",
+                actionText = "查看全部",
+                onActionClick = onOpenHistory,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (uiState.recentHistory.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color.White.copy(alpha = 0.92f),
+                    tonalElevation = 1.dp,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "还没有最近学习",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFF1A3550),
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "开始一次引导解题后，这里会保留最近两条记录，方便你随时回到解题工作台。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF6B8398),
+                        )
+                    }
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    uiState.recentHistory.take(2).forEach { entry ->
+                        SolveRecentHistoryRow(
+                            entry = entry,
+                            onClick = { onOpenRecentHistoryEntry(entry) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SolveRecentHistoryRow(
+    entry: SolveHistoryEntryUiModel,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White.copy(alpha = 0.95f),
+        tonalElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = entry.statusTag,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (entry.isSolved) Color(0xFF0F766E) else Color(0xFF1D4ED8),
+                    modifier = Modifier
+                        .background(
+                            if (entry.isSolved) Color(0xFFCCFBF1) else Color(0xFFDBEAFE),
+                            RoundedCornerShape(8.dp),
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                Text(
+                    text = formatSolveHistoryTime(entry.updatedAtMillis),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF7A96A8),
+                )
+            }
+
+            Text(
+                text = entry.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFF1A3550),
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            Text(
+                text = entry.subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF6B8398),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -1245,6 +1482,96 @@ private fun SolveWorkbenchScreen(
                         )
                         else -> SolveProgressPageContent(state = state)
                     }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SolveHistoryScreen(
+    entries: List<SolveHistoryEntryUiModel>,
+    onBack: () -> Unit,
+    onOpenEntry: (SolveHistoryEntryUiModel) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                expandedHeight = 52.dp,
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                title = {
+                    Text(
+                        text = "全部引导历史",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack, modifier = Modifier.size(38.dp)) {
+                        Icon(
+                            imageVector = Icons.Rounded.ArrowBack,
+                            contentDescription = "返回",
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFFEAF6FF),
+                            Color(0xFFF7FBFF),
+                            Color.White,
+                        ),
+                    ),
+                )
+                .verticalScroll(rememberScrollState())
+                .padding(innerPadding)
+                .padding(horizontal = BluetutorSpacing.screenHorizontal, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (entries.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color.White.copy(alpha = 0.94f),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "还没有引导历史",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF1A3550),
+                        )
+                        Text(
+                            text = "完成一次引导解题后，这里会自动记录历史，你可以随时回到对应的解题工作台。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF6B8398),
+                        )
+                    }
+                }
+            } else {
+                entries.forEach { entry ->
+                    SolveRecentHistoryRow(
+                        entry = entry,
+                        onClick = { onOpenEntry(entry) },
+                    )
                 }
             }
         }
@@ -2824,6 +3151,7 @@ private enum class SolveDestination {
     Report,
     Solution,
     Visualization,
+    History,
 }
 
 private data class SolveArtifactState<T>(
@@ -2843,6 +3171,7 @@ private data class SolveMistakeSyncState(
 private data class SolveRouteUiState(
     val entries: List<SolveEntryUiModel>,
     val tips: List<SolveTipUiModel>,
+    val recentHistory: List<SolveHistoryEntryUiModel>,
 )
 
 private data class SolveEntryUiModel(
@@ -2891,7 +3220,9 @@ private data class SolveGuideConversationState(
     val streamingTutorMarkdown: String = "",
 )
 
-private fun solveRouteMockUiState(): SolveRouteUiState = SolveRouteUiState(
+private fun solveRouteMockUiState(
+    recentHistory: List<SolveHistoryEntryUiModel> = emptyList(),
+): SolveRouteUiState = SolveRouteUiState(
     entries = listOf(
         SolveEntryUiModel(
             action = SolveEntryAction.Camera,
@@ -2945,7 +3276,20 @@ private fun solveRouteMockUiState(): SolveRouteUiState = SolveRouteUiState(
         SolveTipUiModel("💡", "我不会直接给答案，会一步步帮你理解！"),
         SolveTipUiModel("🧩", "做完还能推荐相似题，帮你举一反三"),
     ),
+    recentHistory = recentHistory,
 )
+
+private fun formatSolveHistoryTime(updatedAtMillis: Long): String {
+    if (updatedAtMillis <= 0L) return "刚刚"
+    val now = System.currentTimeMillis()
+    val diff = now - updatedAtMillis
+    return when {
+        diff < 60_000L -> "刚刚"
+        diff < 3_600_000L -> "${diff / 60_000L} 分钟前"
+        diff < 24 * 3_600_000L -> "${diff / 3_600_000L} 小时前"
+        else -> SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(updatedAtMillis))
+    }
+}
 
 private fun readImageBase64FromUri(context: Context, uri: Uri): String? {
     return runCatching {
