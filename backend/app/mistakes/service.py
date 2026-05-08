@@ -191,6 +191,10 @@ class MistakeService:
 		report = self.get_report(request.report_id)
 		if request.user_id and report.user_id != request.user_id:
 			raise ValueError(f"无权访问该错题报告：{request.report_id}")
+		recommendation_id = f"rec_{report.report_id[-8:]}_{request.recommendation_type}"
+		existing = self._get_recommendation(recommendation_id)
+		if existing is not None:
+			return existing
 		user_profile_dict = None
 		effective_user_id = request.user_id or report.user_id
 		if effective_user_id:
@@ -204,8 +208,7 @@ class MistakeService:
 			user_profile=user_profile_dict,
 		)
 		self._recommendations[rec.recommendation_id] = rec
-		if self._persist_runtime_state:
-			save_recommendation(rec)
+		save_recommendation(rec)
 		return rec
 
 	def start_redo_session(self, request: MistakeRedoSessionRequest) -> MistakeRedoSessionData:
@@ -564,12 +567,12 @@ class MistakeService:
 	def _load_existing_data(self) -> None:
 		for report in _list_stored_reports():
 			self._reports[report.report_id] = self._with_solution_metadata(report)
+		for rec in _list_stored_recommendations():
+			self._recommendations[rec.recommendation_id] = rec
 		if not self._persist_runtime_state:
 			return
 		for session in _list_stored_sessions():
 			self._redo_sessions[session.session_id] = session
-		for rec in _list_stored_recommendations():
-			self._recommendations[rec.recommendation_id] = rec
 		for dialogue in _list_stored_dialogue_sessions():
 			self._dialogue_sessions[dialogue.session_id] = dialogue
 		for report in self._reports.values():
@@ -582,8 +585,6 @@ class MistakeService:
 		rec = self._recommendations.get(recommendation_id)
 		if rec is not None:
 			return rec
-		if not self._persist_runtime_state:
-			return None
 		stored = load_recommendation(recommendation_id)
 		if stored is not None:
 			self._recommendations[recommendation_id] = stored
@@ -1061,17 +1062,9 @@ class MistakeService:
 			raise ValueError(f"无权访问该错题报告：{request.report_id}")
 
 		effective_user_id = request.user_id or report.user_id
+		# 启动“讲给AI听”时只生成开场引导，避免首屏串行等待两次大模型调用。
+		# 相似题在当前移动端页面里不参与首屏展示，延后生成可以明显降低超时概率。
 		similar_question = None
-		if effective_user_id:
-			try:
-				rec_request = MistakeRecommendationGenerateRequest(
-					report_id=request.report_id,
-					user_id=effective_user_id,
-					recommendation_type="similar",
-				)
-				similar_question = self.generate_recommendation(rec_request)
-			except Exception:
-				similar_question = None
 
 		report_payload = report.report.model_dump()
 		similar_dict = similar_question.model_dump() if similar_question else None

@@ -96,7 +96,10 @@ fun MainScaffold() {
     ) { innerPadding ->
         BluetutorNavHost(
             navController = navController,
-            modifier = Modifier.padding(innerPadding),
+            modifier = Modifier.padding(
+                top = innerPadding.calculateTopPadding(),
+                bottom = if (shouldShowBottomBar) innerPadding.calculateBottomPadding() else 0.dp,
+            ),
             onPreviewBottomBarVisibilityChange = { previewBottomBarVisible = it },
             onSolveBottomBarVisibilityChange = { solveBottomBarVisible = it },
             onPracticeBottomBarVisibilityChange = { practiceBottomBarVisible = it },

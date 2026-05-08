@@ -85,10 +85,7 @@ class MistakeMultiAgent:
         traces.append(MistakeAgentTrace(agent="problem-analyzer", status="success", summary=str(analysis.get("recommendation_goal") or "分析完成")))
         candidate = self._call(build_variant_generation_prompt(analysis, report_payload, recommendation_type), self._fallback_candidate(report_payload, analysis, recommendation_type))
         traces.append(MistakeAgentTrace(agent="variant-generator", status="success", summary=str(candidate.get("title") or "生成候选题")))
-        reviewed = self._call(build_quality_review_prompt(candidate, analysis), {"normalized_result": self._normalize_candidate(candidate)})
-        final_data = reviewed.get("normalized_result") if isinstance(reviewed.get("normalized_result"), dict) else candidate
-        final_data = self._normalize_candidate(final_data)
-        traces.append(MistakeAgentTrace(agent="quality-reviewer", status="success", summary="质量审核完成"))
+        final_data = self._finalize_recommendation_candidate(candidate, analysis, traces)
         return MistakeRecommendationData(
             recommendation_id=f"rec_{origin_report_id[-8:]}_{recommendation_type}",
             origin_report_id=origin_report_id,
@@ -356,6 +353,32 @@ class MistakeMultiAgent:
             correct = options[0]["id"]
         return {"title": str(candidate.get("title") or "推荐题").strip(), "difficulty": self._normalize_difficulty(candidate.get("difficulty")), "question": str(candidate.get("question") or "请完成以下练习"), "options": options, "correct_option_id": correct, "answer": str(candidate.get("answer") or "").strip(), "explanation": str(candidate.get("explanation") or "").strip(), "knowledge_tags": [str(item).strip() for item in candidate.get("knowledge_tags", []) if str(item).strip()], "why_recommended": str(candidate.get("why_recommended") or "针对薄弱点进行练习")}
 
+    def _candidate_needs_review(self, candidate: dict[str, Any]) -> bool:
+        question = str(candidate.get("question") or "").strip()
+        answer = str(candidate.get("answer") or "").strip()
+        explanation = str(candidate.get("explanation") or "").strip()
+        why_recommended = str(candidate.get("why_recommended") or "").strip()
+        options = candidate.get("options") if isinstance(candidate.get("options"), list) else []
+        return len(question) < 8 or len(answer) < 2 or len(explanation) < 8 or len(why_recommended) < 4 or len(options) < 4
+
+    def _finalize_recommendation_candidate(
+        self,
+        candidate: dict[str, Any],
+        analysis: dict[str, Any],
+        traces: list[MistakeAgentTrace],
+    ) -> dict[str, Any]:
+        if self._candidate_needs_review(candidate):
+            reviewed = self._call(
+                build_quality_review_prompt(candidate, analysis),
+                {"normalized_result": self._normalize_candidate(candidate)},
+            )
+            final_data = reviewed.get("normalized_result") if isinstance(reviewed.get("normalized_result"), dict) else candidate
+            traces.append(MistakeAgentTrace(agent="quality-reviewer", status="success", summary="质量审核完成"))
+        else:
+            final_data = candidate
+            traces.append(MistakeAgentTrace(agent="quality-reviewer", status="success", summary="候选题结构完整，跳过审核"))
+        return self._normalize_candidate(final_data)
+
     def _normalize_redo_plan(self, value: dict[str, Any]) -> dict[str, Any]:
         stage = str(value.get("stage") or "understand_problem")
         mode = str(value.get("interaction_mode") or "single_choice")
@@ -437,10 +460,7 @@ class MistakeMultiAgent:
                 self._fallback_candidate(report_payload, analysis, recommendation_type),
             )
             traces.append(MistakeAgentTrace(agent="variant-generator", status="success", summary=str(candidate.get("title") or "生成候选题")))
-        reviewed = self._call(build_quality_review_prompt(candidate, analysis), {"normalized_result": self._normalize_candidate(candidate)})
-        final_data = reviewed.get("normalized_result") if isinstance(reviewed.get("normalized_result"), dict) else candidate
-        final_data = self._normalize_candidate(final_data)
-        traces.append(MistakeAgentTrace(agent="quality-reviewer", status="success", summary="质量审核完成"))
+        final_data = self._finalize_recommendation_candidate(candidate, analysis, traces)
         return MistakeRecommendationData(
             recommendation_id=f"rec_{origin_report_id[-8:]}_{recommendation_type}",
             origin_report_id=origin_report_id,
