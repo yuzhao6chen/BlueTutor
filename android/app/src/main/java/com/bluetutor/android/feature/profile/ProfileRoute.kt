@@ -60,6 +60,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.provider.Settings
+import android.text.TextUtils
+import com.bluetutor.android.MainActivity
 import com.bluetutor.android.feature.profile.component.ProfileAbilityBar
 import com.bluetutor.android.feature.profile.component.ProfileOwlAvatar
 import com.bluetutor.android.feature.profile.component.ProfileRecentActivityItem
@@ -68,6 +72,7 @@ import com.bluetutor.android.feature.profile.component.ProfileStatOverviewCard
 import com.bluetutor.android.feature.profile.component.ProfileWeekCheckInCard
 import com.bluetutor.android.feature.profile.data.ProfileLocalCache
 import com.bluetutor.android.feature.profile.data.ProfileLocalSnapshot
+import com.bluetutor.android.floatingball.FloatingBallManager
 import com.bluetutor.android.ui.theme.BluetutorGradients
 import com.bluetutor.android.ui.theme.BluetutorRadius
 import com.bluetutor.android.ui.theme.BluetutorSpacing
@@ -86,6 +91,7 @@ fun ProfileRoute(
     var showNicknameDialog by rememberSaveable { mutableStateOf(false) }
     var nicknameDraft by rememberSaveable { mutableStateOf(localSnapshot.userName) }
     var showResetDialog by rememberSaveable { mutableStateOf(false) }
+    var floatingBallEnabled by remember { mutableStateOf(FloatingBallManager.isEnabled(context)) }
 
     fun persistSnapshot(updatedSnapshot: ProfileLocalSnapshot) {
         localSnapshot = updatedSnapshot
@@ -220,6 +226,7 @@ fun ProfileRoute(
             ProfilePage.Settings -> {
                 ProfileSettingsScreen(
                     snapshot = localSnapshot,
+                    floatingBallEnabled = floatingBallEnabled,
                     onBackClick = { page = ProfilePage.Overview },
                     onEditNicknameClick = {
                         nicknameDraft = localSnapshot.userName
@@ -238,6 +245,15 @@ fun ProfileRoute(
                     },
                     onMotionEffectsEnabledChange = { enabled ->
                         updateSnapshot { it.copy(motionEffectsEnabled = enabled) }
+                    },
+                    onFloatingBallEnabledChange = { enabled ->
+                        floatingBallEnabled = enabled
+                        val activity = context as? MainActivity ?: return@ProfileSettingsScreen
+                        if (enabled) {
+                            activity.enableFloatingBall()
+                        } else {
+                            activity.disableFloatingBall()
+                        }
                     },
                     onOpenHelpFeedback = { page = ProfilePage.HelpFeedback },
                     onResetProfileClick = { showResetDialog = true },
@@ -419,6 +435,7 @@ fun ProfileScreen(
 @Composable
 private fun ProfileSettingsScreen(
     snapshot: ProfileLocalSnapshot,
+    floatingBallEnabled: Boolean,
     onBackClick: () -> Unit,
     onEditNicknameClick: () -> Unit,
     onPickAvatarClick: () -> Unit,
@@ -426,6 +443,7 @@ private fun ProfileSettingsScreen(
     onGradeSelected: (String) -> Unit,
     onReminderEnabledChange: (Boolean) -> Unit,
     onMotionEffectsEnabledChange: (Boolean) -> Unit,
+    onFloatingBallEnabledChange: (Boolean) -> Unit,
     onOpenHelpFeedback: () -> Unit,
     onResetProfileClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -546,6 +564,12 @@ private fun ProfileSettingsScreen(
                         description = "后续可用于提醒你按时学习。",
                         checked = snapshot.reminderEnabled,
                         onCheckedChange = onReminderEnabledChange,
+                    )
+                    ProfileSwitchRow(
+                        title = "悬浮球助手",
+                        description = "双击悬浮球可截屏并快速跳转至解题模块。",
+                        checked = floatingBallEnabled,
+                        onCheckedChange = onFloatingBallEnabledChange,
                     )
                 }
             }

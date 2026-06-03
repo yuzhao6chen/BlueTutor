@@ -365,7 +365,7 @@ fun TopBar(
                 Spacer(modifier = Modifier.width(38.dp))
             }
         },
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+        colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color.White,
         ),
     )

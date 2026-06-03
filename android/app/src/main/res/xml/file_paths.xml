@@ -3,4 +3,7 @@
     <cache-path
         name="solve_images"
         path="solve-images/" />
+    <cache-path
+        name="floating_ball_screenshots"
+        path="floating-ball-screenshots/" />
 </paths>

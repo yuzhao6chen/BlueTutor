@@ -7,13 +7,15 @@ import android.text.method.LinkMovementMethod
 import android.util.Base64
 import android.util.TypedValue
 import android.webkit.WebView
+import android.widget.MediaController
 import android.widget.TextView
+import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import com.bluetutor.android.floatingball.FloatingBallManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.pager.HorizontalPager
@@ -69,6 +71,7 @@ import androidx.core.content.FileProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -564,6 +567,41 @@ fun SolveRoute(
     ) { uri ->
         val selectedUri = uri ?: return@rememberLauncherForActivityResult
         launchFullScreenEditor(selectedUri, "screenshot")
+    }
+
+    var pendingAlbumImport by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingAlbumImport) {
+        if (pendingAlbumImport) {
+            kotlinx.coroutines.delay(300)
+            albumLauncher.launch("image/*")
+            pendingAlbumImport = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(200)
+            // 没有录屏权限时，悬浮球设置此标记，通过状态变量触发相册选择器
+            if (FloatingBallManager.consumeNeedsAlbumImport()) {
+                pendingAlbumImport = true
+            }
+            if (FloatingBallManager.pendingScreenshotUri != null) {
+                val screenshotUri = FloatingBallManager.consumePendingScreenshot()
+                if (screenshotUri != null) {
+                    val skipEditor = FloatingBallManager.consumeSkipImageEditor()
+                    if (skipEditor) {
+                        val base64 = readImageBase64FromUri(context, screenshotUri)
+                        if (base64 != null) {
+                            recognizeImageToProblemText(base64, "screenshot")
+                        } else {
+                            guideState = guideState.copy(error = "读取截图失败，请重试")
+                        }
+                    } else {
+                        launchFullScreenEditor(screenshotUri, "screenshot")
+                    }
+                }
+            }
+        }
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -1387,7 +1425,7 @@ private fun SolveProblemConfirmScreen(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SolveWorkbenchScreen(
     state: SolveGuideConversationState,
@@ -2446,6 +2484,9 @@ private fun SolveVisualizationScreen(
                             },
                         )
                     }
+
+                    // 视频演示
+                    SolveVideoCard()
                 }
             }
         }
@@ -2818,6 +2859,64 @@ private fun SolveSvgCard(svg: String) {
             )
         },
     )
+}
+
+@Composable
+private fun SolveVideoCard() {
+    val context = LocalContext.current
+    val resId = context.resources.getIdentifier("trace_problem", "raw", context.packageName)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(24.dp))
+            .background(Color.White, RoundedCornerShape(24.dp))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "解题过程视频演示",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color(0xFF1A3550),
+            fontWeight = FontWeight.ExtraBold,
+        )
+        if (resId != 0) {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+                factory = { ctx ->
+                    VideoView(ctx).apply {
+                        val uri = Uri.parse("android.resource://${ctx.packageName}/$resId")
+                        val controller = MediaController(ctx)
+                        controller.setAnchorView(this)
+                        setMediaController(controller)
+                        setVideoURI(uri)
+                    }
+                },
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(Color(0xFFF5F7FA), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "视频资源未找到",
+                    color = Color(0xFF7A96A8),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        Text(
+            text = "观看视频可更好地理解解题思路与步骤",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF7A96A8),
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

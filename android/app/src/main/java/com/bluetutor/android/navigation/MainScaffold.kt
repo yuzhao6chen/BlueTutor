@@ -12,16 +12,22 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.bluetutor.android.floatingball.FloatingBallManager
 import com.bluetutor.android.ui.theme.BluetutorElevation
+import android.util.Log
 
 @Composable
 fun MainScaffold() {
@@ -33,6 +39,28 @@ fun MainScaffold() {
     var solveBottomBarVisible by remember { mutableStateOf(true) }
     var practiceBottomBarVisible by remember { mutableStateOf(true) }
     var profileBottomBarVisible by remember { mutableStateOf(true) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (FloatingBallManager.consumeShouldNavigateToSolve()) {
+                    Log.d("MainScaffold", "ON_RESUME: navigating to Solve for pending screenshot")
+                    navController.navigate(BluetutorDestination.Solve.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val shouldShowBottomBar = when (currentRoute) {
         BluetutorDestination.Preview.route -> previewBottomBarVisible

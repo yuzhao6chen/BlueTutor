@@ -8,43 +8,35 @@ from langchain_openai import ChatOpenAI
 _GUIDE_DIR = Path(__file__).resolve().parent
 _BACKEND_DIR = _GUIDE_DIR.parents[1]
 
-# 先加载 backend/.env，再允许 guide/.env（若存在）覆盖。
 load_dotenv(_BACKEND_DIR / ".env", override=False)
 load_dotenv(_GUIDE_DIR / ".env", override=True)
 
 _llm_instances: dict[str, Any] = {}
 
-# DashScope OpenAI 兼容接口地址
 _DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 
-def get_llm(model: str = "qwen-plus" ) -> Any:
-    """
-    获取指定模型的 LLM 实例（按模型名称缓存，单例模式）。
-    使用 DashScope OpenAI 兼容接口，支持所有千问系列模型。
-    实例带有自动重试机制，最多重试 3 次。
-
-    Args:
-        model: 模型名称，默认为 "qwen-plus"。
-               可选值示例：
-               - "qwen-plus"（原有默认，兼容现有调用）
-               - "qwen3-max"（用于图意规划，推理能力最强）
-               - "qwen3.6-flash"（用于 SVG 代码生成，速度快成本低）
-
-    Returns:
-        带重试的 ChatOpenAI 实例（通过 DashScope 兼容接口）
-    """
+def get_llm(model: str = "qwen-plus") -> Any:
     global _llm_instances
-    if model not in _llm_instances:
+
+    effective_model = os.getenv("LLM_MODEL_NAME", "").strip() or model
+    cache_key = effective_model
+
+    if cache_key not in _llm_instances:
         api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
         if not api_key:
-            # 兼容后端统一配置命名。
             api_key = os.getenv("LLM_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError("DASHSCOPE_API_KEY/LLM_API_KEY is missing or empty")
-        _llm_instances[model] = ChatOpenAI(
+
+        base_url = os.getenv("LLM_BASE_URL", "").strip() or _DASHSCOPE_BASE_URL
+
+        timeout = int(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
+
+        _llm_instances[cache_key] = ChatOpenAI(
             api_key=api_key,
-            base_url=_DASHSCOPE_BASE_URL,
-            model=model,
+            base_url=base_url,
+            model=effective_model,
+            request_timeout=timeout,
         ).with_retry(stop_after_attempt=3)
-    return _llm_instances[model]
+    return _llm_instances[cache_key]

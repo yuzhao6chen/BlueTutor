@@ -203,6 +203,51 @@
     .badge-chicken_rabbit { background: #fff3e0; color: #e65100; }
     .badge-distance       { background: #e8f5e9; color: #2e7d32; }
     .badge-unknown        { background: #f3f4f6; color: #666; }
+
+    /* ── 视频播放器 ───────────────────────────────────── */
+    .video-section {
+      max-width: 900px;
+      margin: 32px auto 24px;
+      padding: 0 24px;
+    }
+    .video-container {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.1);
+      overflow: hidden;
+    }
+    .video-header {
+      background: linear-gradient(135deg, #1a73e8 0%, #4285f4 100%);
+      color: #fff;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .video-header .icon {
+      font-size: 18px;
+    }
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      background: #000;
+    }
+    .video-wrapper video {
+      width: 100%;
+      height: auto;
+      display: block;
+      outline: none;
+    }
+    .video-footer {
+      padding: 12px 20px;
+      background: #f8f9fa;
+      border-top: 1px solid #e8f0fe;
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -219,6 +264,7 @@
   <button class="btn btn-primary" id="btn-load-solution" onclick="loadSolution()">加载题解</button>
   <button class="btn btn-secondary" id="btn-gen-visual" onclick="generateVisualization()" disabled>生成可视化</button>
   <button class="btn btn-secondary" onclick="clearAll()">清空</button>
+  <button class="btn btn-primary" onclick="loadDemo()" style="background:#e65100;">加载演示数据</button>
 </div>
 
 <!-- 状态栏 -->
@@ -232,6 +278,34 @@
     <div class="empty-state">
       <div class="icon">📄</div>
       <p>题解内容将在此处显示</p>
+    </div>
+  </div>
+</div>
+
+<!-- 视频演示区域 -->
+<div class="video-section">
+  <div class="video-container">
+    <div class="video-header">
+      <span class="icon">🎬</span>
+      <span>解题过程视频演示</span>
+    </div>
+    <div class="video-wrapper">
+      <video
+        id="trace-video"
+        controls
+        preload="auto"
+        playsinline
+       webkit-playsinline
+        x5-video-player-type="h5"
+        x5-video-player-fullscreen="true"
+        poster=""
+      >
+        <source src="trace_problem.mp4" type="video/mp4">
+        您的浏览器不支持视频播放
+      </video>
+    </div>
+    <div class="video-footer">
+      💡 观看视频可更好地理解解题思路与步骤
     </div>
   </div>
 </div>
@@ -461,6 +535,79 @@ function displaySolution() {
 document.getElementById('session-id-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') loadSolution();
 });
+
+// ── 加载演示数据（无需后端，0 次 API 调用）────────────────────
+function loadDemo() {
+  currentSessionId = 'demo';
+  visualizationData = {
+    problem_type: 'chicken_rabbit',
+    visuals: [
+      {
+        step_id: 'step_overview',
+        title: '题意理解',
+        svg: `<svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+          <rect width="600" height="300" fill="#FAFCFF"/>
+          <text x="300" y="35" text-anchor="middle" font-size="18" font-weight="bold" fill="#1a73e8">题意理解：鸡兔同笼</text>
+          <line x1="30" y1="50" x2="570" y2="50" stroke="#e8f0fe" stroke-width="1"/>
+          <text x="60" y="90" font-size="15" fill="#333">已知条件：</text>
+          <text x="80" y="120" font-size="14" fill="#555">• 鸡和兔共有 <tspan font-weight="bold" fill="#e65100">35 个头</tspan></text>
+          <text x="80" y="150" font-size="14" fill="#555">• 鸡和兔共有 <tspan font-weight="bold" fill="#e65100">94 只脚</tspan></text>
+          <text x="60" y="190" font-size="15" fill="#333">求解目标：</text>
+          <text x="80" y="220" font-size="14" fill="#555">• 鸡有多少只？兔有多少只？</text>
+          <rect x="60" y="245" width="480" height="35" rx="6" fill="#e8f0fe"/>
+          <text x="300" y="268" text-anchor="middle" font-size="13" fill="#1a73e8">关键：每只鸡 2 只脚，每只兔 4 只脚</text>
+        </svg>`
+      },
+      {
+        step_id: 'step_equation',
+        title: '列方程求解',
+        svg: `<svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+          <rect width="600" height="300" fill="#FAFCFF"/>
+          <text x="300" y="35" text-anchor="middle" font-size="18" font-weight="bold" fill="#1a73e8">列方程求解</text>
+          <line x1="30" y1="50" x2="570" y2="50" stroke="#e8f0fe" stroke-width="1"/>
+          <text x="60" y="85" font-size="14" fill="#333">设鸡有 x 只，兔有 y 只</text>
+          <rect x="80" y="100" width="200" height="35" rx="6" fill="#fff3e0"/>
+          <text x="180" y="123" text-anchor="middle" font-size="15" font-weight="bold" fill="#e65100">x + y = 35</text>
+          <rect x="320" y="100" width="200" height="35" rx="6" fill="#fff3e0"/>
+          <text x="420" y="123" text-anchor="middle" font-size="15" font-weight="bold" fill="#e65100">2x + 4y = 94</text>
+          <text x="300" y="170" text-anchor="middle" font-size="14" fill="#555">由第一个方程：x = 35 - y</text>
+          <text x="300" y="195" text-anchor="middle" font-size="14" fill="#555">代入第二个方程：</text>
+          <text x="300" y="220" text-anchor="middle" font-size="15" fill="#333">2(35-y) + 4y = 94</text>
+          <text x="300" y="245" text-anchor="middle" font-size="15" fill="#333">70 - 2y + 4y = 94 → 2y = 24</text>
+          <rect x="200" y="258" width="200" height="32" rx="6" fill="#e8f5e9"/>
+          <text x="300" y="280" text-anchor="middle" font-size="16" font-weight="bold" fill="#2e7d32">y = 12（兔），x = 23（鸡）</text>
+        </svg>`
+      },
+      {
+        step_id: 'step_result',
+        title: '验证结果',
+        svg: `<svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+          <rect width="600" height="300" fill="#FAFCFF"/>
+          <text x="300" y="35" text-anchor="middle" font-size="18" font-weight="bold" fill="#1a73e8">验证结果</text>
+          <line x1="30" y1="50" x2="570" y2="50" stroke="#e8f0fe" stroke-width="1"/>
+          <rect x="60" y="70" width="230" height="100" rx="10" fill="#e8f5e9" stroke="#4caf50" stroke-width="2"/>
+          <text x="175" y="100" text-anchor="middle" font-size="16" font-weight="bold" fill="#2e7d32">鸡 = 23 只</text>
+          <text x="175" y="125" text-anchor="middle" font-size="14" fill="#555">头：23 个</text>
+          <text x="175" y="150" text-anchor="middle" font-size="14" fill="#555">脚：23×2 = 46 只</text>
+          <rect x="310" y="70" width="230" height="100" rx="10" fill="#e8f5e9" stroke="#4caf50" stroke-width="2"/>
+          <text x="425" y="100" text-anchor="middle" font-size="16" font-weight="bold" fill="#2e7d32">兔 = 12 只</text>
+          <text x="425" y="125" text-anchor="middle" font-size="14" fill="#555">头：12 个</text>
+          <text x="425" y="150" text-anchor="middle" font-size="14" fill="#555">脚：12×4 = 48 只</text>
+          <line x1="60" y1="190" x2="540" y2="190" stroke="#e0e0e0" stroke-width="1"/>
+          <text x="300" y="220" text-anchor="middle" font-size="15" fill="#333">总头数：23 + 12 = <tspan font-weight="bold" fill="#2e7d32">35 ✓</tspan></text>
+          <text x="300" y="250" text-anchor="middle" font-size="15" fill="#333">总脚数：46 + 48 = <tspan font-weight="bold" fill="#2e7d32">94 ✓</tspan></text>
+          <rect x="180" y="265" width="240" height="28" rx="6" fill="#1a73e8"/>
+          <text x="300" y="284" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">答案验证正确！</text>
+        </svg>`
+      }
+    ]
+  };
+  rawSolutionText = `## 题意理解\n[VISUAL:step_overview]\n\n## 列方程求解\n[VISUAL:step_equation]\n\n## 验证结果\n[VISUAL:step_result]\n\n**答：鸡有23只，兔有12只。**`;
+
+  displaySolution();
+  document.getElementById('btn-gen-visual').disabled = true;
+  setStatus('演示数据加载成功！无需后端 API，可直接查看可视化效果和视频', 'success');
+}
 </script>
 </body>
 </html>

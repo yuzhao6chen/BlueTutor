@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">BlueTutor</string>
+    <string name="floating_ball_channel_name">悬浮球服务</string>
+    <string name="floating_ball_channel_desc">保持悬浮球在屏幕上显示</string>
+    <string name="floating_ball_notification_title">BlueTutor 悬浮球</string>
+    <string name="floating_ball_notification_text">悬浮球正在运行中</string>
+    <string name="floating_ball_dialog_hint">需要我的帮助吗</string>
 </resources>
