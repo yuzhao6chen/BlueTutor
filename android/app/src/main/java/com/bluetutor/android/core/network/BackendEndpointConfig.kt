@@ -9,11 +9,13 @@ object BackendEndpointConfig {
     private const val templateAssetName = "backend_endpoints.template.json"
 
     private val emulatorFallbackBaseUrls = listOf(
+        "http://39.96.10.66:8000",
         "http://10.0.2.2:8000",
         "http://localhost:8000",
         "http://10.1.2.120:8000",
     )
     private val deviceFallbackBaseUrls = listOf(
+        "http://39.96.10.66:8000",
         "http://10.1.2.120:8000",
         "http://10.0.2.2:8000",
     )
