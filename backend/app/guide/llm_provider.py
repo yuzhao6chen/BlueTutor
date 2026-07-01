@@ -5,6 +5,8 @@ from typing import Any
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
+from ..shared.openai_compat import build_provider_base_url
+
 _GUIDE_DIR = Path(__file__).resolve().parent
 _BACKEND_DIR = _GUIDE_DIR.parents[1]
 
@@ -29,7 +31,7 @@ def get_llm(model: str = "qwen-plus") -> Any:
         if not api_key:
             raise RuntimeError("DASHSCOPE_API_KEY/LLM_API_KEY is missing or empty")
 
-        base_url = os.getenv("LLM_BASE_URL", "").strip() or _DASHSCOPE_BASE_URL
+        base_url = build_provider_base_url(os.getenv("LLM_BASE_URL", "").strip() or _DASHSCOPE_BASE_URL)
 
         timeout = int(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
 

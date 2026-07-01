@@ -24,6 +24,7 @@ from .prompt import (
     build_variant_generation_prompt,
 )
 from .schema import MistakeAgentTrace, MistakeRecommendationData, MistakeRecommendationOption, MistakeRedoOption
+from ..shared.openai_compat import build_chat_completions_url
 
 DEFAULT_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 DEFAULT_BASE_URL = "https://api-ai.vivo.com.cn/vivogpt/completions"
@@ -44,12 +45,12 @@ class MistakeMultiAgent:
     def __init__(self, *, base_url: str | None = None, api_key: str | None = None, app_id: str | None = None, model_name: str | None = None, timeout_seconds: int | None = None, max_retries: int | None = None, env_path: Path | None = None) -> None:
         self.env_path = env_path or DEFAULT_ENV_PATH
         _load_env_file(self.env_path)
-        self.base_url = (
+        configured_base_url = (
             base_url
             or os.getenv("MISTAKES_LLM_BASE_URL")
             or os.getenv("LLM_BASE_URL")
-            or DEFAULT_BASE_URL
         )
+        self.base_url = build_chat_completions_url(configured_base_url) if configured_base_url else DEFAULT_BASE_URL
         self.api_key = (
             api_key
             or os.getenv("VIVO_APP_KEY")
